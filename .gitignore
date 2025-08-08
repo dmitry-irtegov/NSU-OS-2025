@@ -53,3 +53,9 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# some musom
+core
+core.*
+.nfs*
+.DS_Store
