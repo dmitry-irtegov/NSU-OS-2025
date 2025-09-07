@@ -22,4 +22,5 @@ int main()
         sp->tm_year + 1900, sp->tm_hour,
         sp->tm_min, tzname[sp->tm_isdst]);
     exit(0);
+    
 }
