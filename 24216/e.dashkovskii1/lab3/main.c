@@ -2,7 +2,6 @@
 #include <unistd.h>
 
 int main() {
-
     const char *filename = "file.txt";
     FILE *file;
 
