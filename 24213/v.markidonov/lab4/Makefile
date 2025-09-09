@@ -1,9 +1,10 @@
 OUTFILE = out
 FILES = main.c llist.c
-FLAGS = -Wall
+FLAGS = -v
+COMPILER = cc
 
 all: $(FILES)
-	gcc -o $(OUTFILE) $(FILES) $(FLAGS)
+	$(COMPILER) -o $(OUTFILE) $(FILES) $(FLAGS)
 
 run: all
 	./$(OUTFILE)
