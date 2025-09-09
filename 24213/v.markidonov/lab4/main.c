@@ -29,7 +29,7 @@ int main() {
         }
 
         char *str;
-        if (!(str = (char*)malloc(strlen(buffer)+1))) {
+        if (!(str = (char*)malloc(strlen(buffer) + 1))) {
             perror("malloc");
             return 1;
         }
