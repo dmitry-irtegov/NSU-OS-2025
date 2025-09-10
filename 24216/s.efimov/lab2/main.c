@@ -3,7 +3,6 @@
 #include <time.h>
 #include <stdlib.h>
 
-
 int main(){
     int status = putenv("TZ=America/Los_Angeles");
     
