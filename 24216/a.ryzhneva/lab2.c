@@ -3,8 +3,6 @@
 #include <time.h>
 #include <stdlib.h>
 
-extern char *tzname[];
-
 int main()
 {
     time_t now;
@@ -14,12 +12,10 @@ int main()
         perror("putenv failed");
         exit(1);
     }
-    else {
-        time(&now);
+    
+    time(&now);
 
-        printf("%s", ctime(&now));
-        exit(0);
-    }
-
-    return(0);
+    printf("%s", ctime(&now));
+    return;
+    
 }
