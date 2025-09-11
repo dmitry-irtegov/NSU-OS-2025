@@ -12,12 +12,12 @@ int main() {
     tzset();
     if (time(&now) == (time_t)-1) {
         perror("time failed");
-        return -2;
+        return -1;
     }
     char *time_str = ctime(&now);
     if (time_str == NULL) {
         perror("ctime failed");
-        return -3;
+        return -1;
     }
 
     printf("UTC time: %s", time_str);
