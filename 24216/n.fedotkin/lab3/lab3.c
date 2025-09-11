@@ -23,7 +23,7 @@ int main() {
     int res = setuid(getuid());
     if (res == -1) {
         perror("Error setting UID");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     
     printf("UID changed successfully\n");
@@ -33,5 +33,5 @@ int main() {
 
     checkOpenFile(nameFile);
 
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
