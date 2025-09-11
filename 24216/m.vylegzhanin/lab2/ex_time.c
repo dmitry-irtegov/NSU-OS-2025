@@ -9,7 +9,7 @@ main()
     time(&now);
     if (setenv("TZ", "America/Los_Angeles", 1) == -1){
         perror("failed to set environment variable");
-        exit(0);
+        exit(1);
     }
     tzset(); 
     printf("%s", ctime(&now));
