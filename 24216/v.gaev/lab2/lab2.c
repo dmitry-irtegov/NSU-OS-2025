@@ -3,24 +3,23 @@
 #include <time.h>
 #include <stdlib.h>
 
-extern char *tzname[];
-
 int main() {
     time_t now;
-    struct tm *sp;
+    if (setenv("TZ", "America/Los_Angeles", 1) != 0) {
+        perror("setenv failed");
+        return -1;
+    }
+    tzset();
+    if (time(&now) == (time_t)-1) {
+        perror("time failed");
+        return -2;
+    }
+    char *time_str = ctime(&now);
+    if (time_str == NULL) {
+        perror("ctime failed");
+        return -3;
+    }
 
-    setenv("TZ", "America/Los_Angeles", 1);
-    tzset();  
-
-    (void) time(&now);
-
-    printf("UTC time: %s", ctime(&now));
-
-    sp = localtime(&now);
-    printf("California time: %d/%d/%02d %d:%02d %s\n",
-           sp->tm_mon + 1, sp->tm_mday,
-           sp->tm_year + 1900, sp->tm_hour,
-           sp->tm_min, tzname[sp->tm_isdst]);
-
-    exit(0);
+    printf("UTC time: %s", time_str);
+    return 0;
 }
