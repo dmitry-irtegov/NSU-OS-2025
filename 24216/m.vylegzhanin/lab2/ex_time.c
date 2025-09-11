@@ -1,18 +1,30 @@
-#include <sys/types.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
 
-main()
+int main(void)
 {
     time_t now;
-    time(&now);
-    if (setenv("TZ", "America/Los_Angeles", 1) == -1){
-        perror("failed to set environment variable");
-        exit(EXIT_FAILURE); 
-    }
-    tzset(); 
     
-    printf("%s", ctime(&now));
-    exit(EXIT_SUCCESS);
+    if (time(&now) == (time_t)-1) {
+        perror("Failed to get current time");
+        exit(EXIT_FAILURE);
+    }
+    
+    if (setenv("TZ", "America/Los_Angeles", 1) == -1) {
+        perror("Failed to set environment variable");
+        exit(EXIT_FAILURE);
+    }
+    
+    tzset();
+
+    char *time_str = ctime(&now);
+    if (time_str == NULL) {
+        fprintf(stderr, "Failed to convert time to string\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    printf("%s", time_str);
+    
+    return EXIT_SUCCESS;
 }
