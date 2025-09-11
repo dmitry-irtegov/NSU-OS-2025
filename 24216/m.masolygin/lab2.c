@@ -3,16 +3,20 @@
 #include <stdlib.h>
 
 
-int main()
-{
-    if (putenv("TZ=America/Los_Angeles")==-1){
+int main(){
+    if (putenv("TZ=America/Los_Angeles") == -1) {
         perror("Fail putenv");
         return 1;
-    };  
+    } 
 
     time_t now = time(NULL);
     
-    printf("%s", ctime(&now));
+    char* result = ctime(&now);
+    if (result == NULL){
+        perror("Fail ctime");
+        return 1;
+    }
+    printf("%s", result);
 
     return 0;
 }
