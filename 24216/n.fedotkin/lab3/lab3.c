@@ -2,13 +2,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-void checkOpenFile(FILE* file) {
+void checkOpenFile(const char* nameFile) {
+    FILE* file = fopen(nameFile, "rw");
     if (file == NULL) {
         perror("Error opening file");
-    } else {
-        printf("File opened successfully\n");
-        (void)fclose(file);
     }
+    printf("File opened successfully\n");
+    fclose(file);
 }
 
 int main() {
@@ -17,22 +17,21 @@ int main() {
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
 
-    FILE* file = fopen(nameFile, "rw");
-    checkOpenFile(file);
+    
+    checkOpenFile(nameFile);
 
     int res = setuid(getuid());
     if (res == -1) {
         perror("Error setting UID");
         exit(1);
-    } else {
-        printf("UID changed successfully\n");
     }
+    
+    printf("UID changed successfully\n");
 
     printf("Real UID after setting: %d\n", getuid());
     printf("Effective UID after setting: %d\n", geteuid());
 
-    file = fopen(nameFile, "rw");
-    checkOpenFile(file);
-    
+    checkOpenFile(nameFile);
+
     exit(0);
 }
