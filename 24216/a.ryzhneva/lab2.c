@@ -10,12 +10,20 @@ int main()
     int f = putenv("TZ=US/Los_Angeles");
     if (f != 0) {
         perror("putenv failed");
-        exit(1);
+        return 1;
     }
     
     time(&now);
-
-    printf("%s", ctime(&now));
-    return;
     
+    char * rs = ctime(&now);
+    
+    if (rs == NULL) {
+        perror("ctime failed");
+        return 1;
+    }
+
+    printf("%s", rs);
+    
+    return 0;
+
 }
