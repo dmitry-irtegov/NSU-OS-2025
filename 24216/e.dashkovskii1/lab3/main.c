@@ -18,11 +18,11 @@ int main() {
 
     if (setuid(getuid()) != 0) {
         perror("setuid");
-        return 1;
+        exit(1);
     }
 
     printf("Real UID: %d, Effective UID: %d\n", getuid(), geteuid());
     try_open(filename);
 
-    return 0;
+    exit(0);
 }
