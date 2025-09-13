@@ -4,18 +4,21 @@
 
 int main() {
     pid_t pid = fork();
+    
     switch (pid) {
     case -1:
         perror("erorr fork");
-        return 1;
+        exit(1);
     case 0:
         execlp("cat", "cat", "file.txt", NULL);
         perror("error execlp");
-        return 1;
+        exit(1);
     default:
-        waitpid(pid, NULL, 0);
+        if (waitpid(pid, NULL, 0) == -1) {
+            perror("error waitpid");
+            exit(1);
+        }
         printf("\nparent process\n");
-        break;
     }
-    return 0;
+    exit(0);
 }
