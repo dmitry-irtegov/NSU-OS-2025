@@ -19,6 +19,7 @@ int main() {
             exit(1);
         }
         printf("\nparent process\n");
+        break;
     }
     exit(0);
 }
