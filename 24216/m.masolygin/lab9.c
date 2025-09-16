@@ -1,7 +1,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <stdio.h>
 
 // wait - very simple implementation
@@ -19,11 +19,11 @@ int main()
     case 0:
         execvp("/bin/cat", argv);
         perror("Error execvp");
-        return 1;
+        exit(1);
 
     case -1:
         perror("Error fork");
-        return 1;
+        exit(1);
 
     default:
         printf("Hello from parent!\n");
@@ -32,7 +32,20 @@ int main()
         if (waitpidStatus == -1)
         {
             perror("Error waitpid");
-            return 1;
+            exit(1);
+        }
+
+        if (WIFEXITED(status))
+        {
+            printf("Child process %d exited with status %d\n", pid, WEXITSTATUS(status));
+        }
+        else if (WIFSIGNALED(status))
+        {
+            printf("Child process %d was terminated by signal %d\n", pid, WTERMSIG(status));
+        }
+        else
+        {
+            printf("Child process %d ended dont normally\n", pid);
         }
 
         printf("\nChild process %d finished!\n", pid);
