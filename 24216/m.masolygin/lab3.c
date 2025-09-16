@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-void openFile(char *filename)
+void open_file(char *filename)
 {
     FILE *file = fopen(filename, "r");
     if (file == NULL)
@@ -13,7 +13,10 @@ void openFile(char *filename)
     else
     {
         printf("File opened successfully\n");
-        fclose(file);
+        if (fclose(file) != 0)
+        {
+            perror("Error closing file");
+        }
     }
 }
 
@@ -25,7 +28,7 @@ int main()
 
     printf("Real UID: %d\n", real);
     printf("Effective UID: %d\n", effective);
-    openFile(filename);
+    open_file(filename);
 
     if (setuid(real) != 0)
     {
@@ -33,9 +36,10 @@ int main()
         return 1;
     }
 
+    effective = geteuid();
     printf("Real UID: %d\n", real);
     printf("Effective UID: %d\n", effective);
-    openFile(filename);
+    open_file(filename);
 
     return 0;
 }
