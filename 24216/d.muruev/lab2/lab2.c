@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
@@ -6,7 +5,8 @@
 int main() {
     time_t now;
 
-    if (setenv("TZ", "America/Los_Angeles", 1) != 0) {
+    int env = setenv("TZ", "America/Los_Angeles", 1);
+    if (env != 0) {
         perror("Can not change the local variable TZ");
         exit(EXIT_FAILURE);
     }
