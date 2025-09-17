@@ -12,7 +12,7 @@ int main(){
 
     time_t now = time(NULL);
     
-    if (now == (time_t)(-1)){
+    if (now == ((time_t)-1)){
         perror("time error");
         exit(1);
     }
