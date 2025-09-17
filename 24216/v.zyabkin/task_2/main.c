@@ -17,7 +17,7 @@ int main() {
         exit(1);
     }
 
-    printf("Current time: %s", answer);
+    printf("Current time = %s", answer);
 
     exit(0);
 }
