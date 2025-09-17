@@ -4,7 +4,7 @@
 
 
 int main(){
-    if (putenv("TZ=America/Los_Angeles") == -1) {
+    if (putenv("TZ=America/Los_Angeles") != 0) {
         perror("Fail putenv");
         return 1;
     } 
