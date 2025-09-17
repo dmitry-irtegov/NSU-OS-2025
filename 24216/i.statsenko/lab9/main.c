@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -11,13 +12,16 @@ int main(void)
     {
     case -1:
         perror("Ошибка при создании процесса");
-        return 1;
+        exit(EXIT_FAILURE);
     case 0:
         execlp("cat", "cat", NAMEFILE, NULL);
         perror("Не удалось выполнить cat");
-        return 1;
+        exit(EXIT_FAILURE);
     default:
-        waitpid(pid, NULL, 0);
+        if (waitpid(pid, NULL, 0) == -1) {
+            perror("Ошибка при ожидании завершения дочернего процесса");
+            exit(EXIT_FAILURE);
+        }
         printf("\nРодительский процесс\n");
         break;
     }
