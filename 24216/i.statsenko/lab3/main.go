@@ -12,8 +12,12 @@ func TryToOpenFile(name string) {
 	file, err := os.Open(name)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
-	file.Close()
+	err = file.Close()
+	if err != nil {
+		fmt.Println(err)
+	}
 }
 
 func main() {
