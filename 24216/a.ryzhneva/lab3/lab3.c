@@ -5,9 +5,10 @@
 void fileOpen(const char *filename) {
     FILE *f = fopen(filename, "r+");
     if (f == NULL) {
-        perror("Can't open file");
-    } else {
-        printf("Success open file.\n");
+        perror("can't open file");
+    } 
+    else {
+        printf("file opened successfully\n");
         fclose(f);
     }
 }
@@ -20,15 +21,15 @@ int main(void) {
     const char *filename = "data.txt";
 
     printUID();
-    open(filename);
+    fileOpen(filename);
 
     if (setuid(getuid()) == -1) {
-        perror("Ошибка setuid");
+        perror("setuid(getuid()) failed");
         exit(EXIT_FAILURE);
     }
 
     printUID();
-    open(filename);
+    fileOpen(filename);
 
     return 0;
 }
