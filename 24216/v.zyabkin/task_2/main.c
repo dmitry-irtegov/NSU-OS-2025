@@ -7,7 +7,7 @@ int main() {
 
     int operation_result = setenv("TZ", "America/Los_Angeles", 1);
     if (operation_result != 0) {
-        perror("setenv failed");
+        perror("setenv  failed");
         exit(1);
     }
 
