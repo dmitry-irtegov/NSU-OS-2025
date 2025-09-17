@@ -6,7 +6,7 @@ int main() {
 
     if (setenv("TZ", "America/Los_Angeles", 1) != 0) {
         perror("setenv fail");
-        return 1;
+        exit(EXIT_FAILURE);
     }
     tzset();
 
