@@ -13,7 +13,7 @@ int main() {
 
     char* answer = ctime(&now);
     if (answer == NULL) {
-        perror("getting time failed");
+        perror("getting  time failed");
         exit(1);
     }
 
