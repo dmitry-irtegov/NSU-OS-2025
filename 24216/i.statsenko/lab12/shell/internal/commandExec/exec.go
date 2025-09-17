@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"shell/internal/prompt"
 	"syscall"
 )
 
@@ -14,7 +15,7 @@ func safeClose(file *os.File) {
 	}
 }
 
-func (command *Command) Fork() {
+func (command *Command) Fork(pmpt prompt.Prompt) {
 	stdin := os.Stdin
 	stdout := os.Stdout
 	stderr := os.Stderr
@@ -58,12 +59,20 @@ func (command *Command) Fork() {
 	}
 	if command.Bkgrnd == 1 {
 		fmt.Println("PID: ", pid)
+		go func(pt prompt.Prompt) {
+			var ws syscall.WaitStatus
+			_, err := syscall.Wait4(pid, &ws, 0, nil)
+			if err != nil {
+				fmt.Println("Error waiting process", err)
+			}
+			fmt.Println("Done ", pid)
+			pt.PrintPrompt()
+		}(pmpt)
 	} else {
 		var ws syscall.WaitStatus
 		_, err := syscall.Wait4(pid, &ws, 0, nil)
 		if err != nil {
 			fmt.Println("Error waiting process", err)
-			return
 		}
 	}
 }

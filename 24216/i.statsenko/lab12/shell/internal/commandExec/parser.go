@@ -2,6 +2,7 @@ package commandExec
 
 import (
 	"fmt"
+	"shell/internal/strWork"
 )
 
 type Command struct {
@@ -24,7 +25,7 @@ func (cmds *CmdRequest) Parseline(line []byte, ncmds *int) int {
 	lnLine := len(line)
 	cmds.Cmds = append(cmds.Cmds, Command{})
 	for strIndex := 0; strIndex < lnLine; {
-		strIndex = blankskip(line, strIndex, lnLine)
+		strIndex = strWork.Blankskip(line, strIndex, lnLine)
 		if strIndex >= lnLine {
 			break
 		}
@@ -45,25 +46,25 @@ func (cmds *CmdRequest) Parseline(line []byte, ncmds *int) int {
 				strIndex++
 			}
 			strIndex++
-			strIndex = blankskip(line, strIndex, lnLine)
+			strIndex = strWork.Blankskip(line, strIndex, lnLine)
 			if strIndex >= lnLine {
 				fmt.Println("syntax error")
 				return -1
 			}
 			if aflg == 1 {
-				cmds.Cmds[*ncmds].Appfile, strIndex = strpbrk(line, strIndex, lnLine, delim)
+				cmds.Cmds[*ncmds].Appfile, strIndex = strWork.Strpbrk(line, strIndex, lnLine, delim)
 			} else {
-				cmds.Cmds[*ncmds].Outfile, strIndex = strpbrk(line, strIndex, lnLine, delim)
+				cmds.Cmds[*ncmds].Outfile, strIndex = strWork.Strpbrk(line, strIndex, lnLine, delim)
 			}
 			aflg = 0
 		case '<':
 			strIndex++
-			strIndex = blankskip(line, strIndex, lnLine)
+			strIndex = strWork.Blankskip(line, strIndex, lnLine)
 			if strIndex >= lnLine {
 				fmt.Println("syntax error")
 				return -1
 			}
-			cmds.Cmds[*ncmds].Infile, strIndex = strpbrk(line, strIndex, lnLine, delim)
+			cmds.Cmds[*ncmds].Infile, strIndex = strWork.Strpbrk(line, strIndex, lnLine, delim)
 		case '|':
 			if nargs == 0 {
 				fmt.Println("syntax error")
@@ -81,7 +82,7 @@ func (cmds *CmdRequest) Parseline(line []byte, ncmds *int) int {
 				rval = *ncmds + 1
 			}
 			var arg string
-			arg, strIndex = strpbrk(line, strIndex, lnLine, delim)
+			arg, strIndex = strWork.Strpbrk(line, strIndex, lnLine, delim)
 			cmds.Cmds[*ncmds].Cmdargs = append(cmds.Cmds[*ncmds].Cmdargs, arg)
 			nargs++
 		} /*  close switch  */

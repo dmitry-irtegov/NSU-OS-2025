@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"shell/internal/commandExec"
+	"shell/internal/prompt"
+	"shell/internal/strWork"
 )
 
 /*  cmdflag's  */
@@ -14,14 +16,14 @@ func Shell() {
 	var cmds commandExec.CmdRequest
 	var i int
 	var ncmds int
-	prompt := fmt.Sprintf("[%s]~ ", os.Args[0])
-	for line := commandExec.Promptline(prompt); line != nil; line = commandExec.Promptline(prompt) {
+	pmpt := prompt.Prompt{fmt.Sprintf("[%s]~ ", os.Args[0])}
+	for line := strWork.Promptline(pmpt); line != nil; line = strWork.Promptline(pmpt) {
 		if ncmds = cmds.Parseline(line, &ncmds); ncmds <= 0 {
 			continue /* read next line */
 		}
 
 		for i = 0; i < ncmds; i++ {
-			cmds.Cmds[i].Fork()
+			cmds.Cmds[i].Fork(pmpt)
 			cmds.Cmds[i] = commandExec.Command{}
 		}
 		ncmds = 0
