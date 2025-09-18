@@ -7,17 +7,17 @@ int main() {
     // Печатаем реальный и эффективный идентификаторы пользователя
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
-    char try_open = 0; 
+    
     // Открываем файл для проверки доступа
     FILE *file1 = fopen("file", "r");
     if (file1 == NULL) {
-        try_open += 1;
         perror("Error opening file");
     }
 
     // Устанавливаем эффективный UID, чтобы совпадал с реальным
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
+        fclose(file1); // Закрываем файл, если он был открыт до ошибки
         exit(1);
     }
 
@@ -29,25 +29,15 @@ int main() {
     // Открываем файл для проверки доступа
     FILE *file2 = fopen("file", "r");
     if (file2 == NULL) {
-        try_open += 2;
         perror("Error opening file");
+        fclose(file1); // Закрываем первый файл
+        return 1;
     }
 
-    // Закрываем файл, если он был успешно открыт
-    if(try_open == 1){
-        fclose(file1);
-    }
-    if(try_open == 2)
-    {
-        fclose(file2);
-    }
-    if(try_open == 3)
-    {
-        fclose(file1);
-        fclose(file2);
-    }
-    if (try_open == 0){
-        printf("File opened and closed successfully.\n");
-    }
+    // Закрываем файлы, если они были успешно открыты
+    fclose(file1);
+    fclose(file2);
+    printf("File opened and closed successfully.\n");
+
     return 0;
 }
