@@ -30,6 +30,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 		stdin, err = os.OpenFile(command.Infile, os.O_RDONLY, 0)
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 		defer safeClose(stdin)
 	}
@@ -38,6 +39,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 		stdout, err = os.OpenFile(command.Outfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 		defer safeClose(stdout)
 	}
@@ -46,6 +48,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 		stdout, err = os.OpenFile(command.Appfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			fmt.Println(err)
+			return
 		}
 		defer safeClose(stdout)
 	}
@@ -56,6 +59,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 	})
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 	if command.Bkgrnd == 1 {
 		fmt.Println("PID: ", pid)
@@ -64,6 +68,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 			_, err := syscall.Wait4(pid, &ws, 0, nil)
 			if err != nil {
 				fmt.Println("Error waiting process", err)
+				return
 			}
 			fmt.Println("Done ", pid)
 			pt.PrintPrompt()
@@ -73,6 +78,7 @@ func (command *Command) Fork(pmpt prompt.Prompt) {
 		_, err := syscall.Wait4(pid, &ws, 0, nil)
 		if err != nil {
 			fmt.Println("Error waiting process", err)
+			return
 		}
 	}
 }

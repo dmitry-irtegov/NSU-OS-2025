@@ -24,7 +24,7 @@ func Shell() {
 
 		for i = 0; i < ncmds; i++ {
 			cmds.Cmds[i].Fork(pmpt)
-			cmds.Cmds[i] = commandExec.Command{}
+			cmds.Cmds[i] = commandExec.Command{} // убрать
 		}
 		ncmds = 0
 		cmds.Cmds = cmds.Cmds[:0]
