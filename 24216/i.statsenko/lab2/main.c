@@ -11,7 +11,12 @@ int main() {
     tzset();
 
     time_t now = time(NULL);
-    printf("%s", ctime(&now));
+    char *t = ctime(&now);
+    if (t == NULL) {
+        perror("ctime fail");
+        exit(EXIT_FAILURE);
+    }
+    printf("%s", t);
 
     return 0;
 }
