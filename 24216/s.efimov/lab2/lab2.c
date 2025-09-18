@@ -3,24 +3,23 @@
 #include <time.h>
 #include <stdlib.h>
 
-char buffer[20];
-
 int main(){
     int status = putenv("TZ=America/Los_Angeles");
     
     if (status != 0){
-        perror("You can't change the TZ variable to find out the time in California.\n");
+        perror("Falling to get current time.\n");
         exit(EXIT_FAILURE);
     }
 
     time_t CaliforniaTime;
-    struct tm *now;
+    if (time(&CaliforniaTime) == (time_t)(-1)){
+        perror("You can't change the TZ variable to find out the time in California.\n");
+        exit(EXIT_FAILURE);
+    }
 
-    time(&CaliforniaTime);
-    now = localtime(&CaliforniaTime);
-    strftime(buffer, sizeof(buffer), "%d.%m.%Y %H:%M:%S", now);
+    char* now = ctime(&CaliforniaTime);
 
-    printf("Current Date and Time: %s\n", buffer);
+    printf("Current Date and Time: %s\n", now);
     
     exit(EXIT_SUCCESS);
 }
