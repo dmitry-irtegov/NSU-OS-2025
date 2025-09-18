@@ -31,7 +31,7 @@ int main() {
     if (file2 == NULL) {
         perror("Error opening file");
         fclose(file1); // Закрываем первый файл
-        return 1;
+        exit(1);
     }
 
     // Закрываем файлы, если они были успешно открыты
