@@ -12,12 +12,12 @@ int main() {
     FILE *file1 = fopen("file", "r");
     if (file1 == NULL) {
         perror("Error opening file");
-        exit(1);
     }
 
     // Устанавливаем эффективный UID, чтобы совпадал с реальным
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
+        exit(1);
     }
 
     // Печатаем их снова после установки
