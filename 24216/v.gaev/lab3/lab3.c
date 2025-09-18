@@ -7,6 +7,8 @@ int main() {
     // Печатаем реальный и эффективный идентификаторы пользователя
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
+    
+    // Открываем файл для проверки доступа
     FILE *file1 = fopen("file", "r");
     if (file1 == NULL) {
         perror("Error opening file");
@@ -32,7 +34,8 @@ int main() {
     }
 
     // Закрываем файл, если он был успешно открыт
-    fclose(file);
+    fclose(file1);
+    fclose(file2);
     printf("File opened and closed successfully.\n");
 
     return 0;
