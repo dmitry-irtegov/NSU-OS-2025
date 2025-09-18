@@ -11,6 +11,7 @@ void try_open(int file)
     else
     {
         fclose(file);
+        printf("File opened and closed successfully.\n");
     }
 
 }
