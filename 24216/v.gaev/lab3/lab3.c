@@ -16,11 +16,14 @@ void try_open(int file)
 
 }
 
-int main() {
-    // Печатаем реальный и эффективный идентификаторы пользователя
+void get_id()
+{
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
-    
+}
+int main() {
+
+    get_id();
     // Открываем файл для проверки доступа
     FILE *file1 = fopen("file", "r");
     try_open(file1);
@@ -30,11 +33,9 @@ int main() {
         exit(1);
     }
 
-    // Печатаем их снова после установки
     printf("After setuid:\n");
-    printf("Real UID: %d\n", getuid());
-    printf("Effective UID: %d\n", geteuid());
-
+    get_id();
+    
     // Открываем файл для проверки доступа
     FILE *file2 = fopen("file", "r");
     try_open(file2);
