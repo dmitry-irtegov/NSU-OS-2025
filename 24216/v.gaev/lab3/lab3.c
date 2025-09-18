@@ -12,6 +12,7 @@ int main() {
         perror("Error opening file");
         exit(1);
     }
+    
     // Устанавливаем эффективный UID, чтобы совпадал с реальным
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
