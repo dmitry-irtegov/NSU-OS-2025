@@ -1,7 +1,7 @@
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdio.h>
-    
+#include <stdlib.h>
+#include <unistd.h>
+
 int main() {
     FILE *fp; static char response;
     if((fp = fopen("answer","a+")) == NULL){
@@ -15,6 +15,7 @@ int main() {
         printf("Answer(a/b)? ");
         scanf("%c%*c", &response);
     }
+    printf("%5ld, %5ld\n", getuid(), geteuid());
     fprintf(fp,"%5ld:%c\n", getuid(), response);
     fclose(fp);
 }
