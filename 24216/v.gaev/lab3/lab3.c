@@ -7,7 +7,7 @@ int main() {
     // Печатаем реальный и эффективный идентификаторы пользователя
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
-    
+
     // Открываем файл для проверки доступа
     FILE *file1 = fopen("file", "r");
     if (file1 == NULL) {
@@ -18,7 +18,6 @@ int main() {
     // Устанавливаем эффективный UID, чтобы совпадал с реальным
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
-        exit(1);
     }
 
     // Печатаем их снова после установки
@@ -30,7 +29,6 @@ int main() {
     FILE *file2 = fopen("file", "r");
     if (file2 == NULL) {
         perror("Error opening file");
-        exit(1);
     }
 
     // Закрываем файл, если он был успешно открыт
