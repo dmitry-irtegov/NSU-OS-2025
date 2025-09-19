@@ -3,6 +3,9 @@
 #include <unistd.h>
 
 int main() {
+    printf("%5ld, %5ld\n", getuid(), geteuid());
+    setuid(getuid());
+
     FILE *fp;
     if((fp = fopen("answer","a+")) == NULL){
         fprintf(stderr,"Cannot open answer\n");
@@ -12,7 +15,6 @@ int main() {
     fclose(fp);
 
     printf("%5ld, %5ld\n", getuid(), geteuid());
-    setuid(getuid());
     
     if((fp = fopen("answer","a+")) == NULL){
         fprintf(stderr,"Cannot open answer\n");
@@ -20,8 +22,6 @@ int main() {
         exit(1);
     }
     fclose(fp);
-    
-    printf("%5ld, %5ld\n", getuid(), geteuid());
     
     return 0;
 }
