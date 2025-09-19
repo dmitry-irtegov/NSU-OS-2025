@@ -4,8 +4,6 @@
 
 int main() {
     printf("%5ld, %5ld\n", getuid(), geteuid());
-    setuid(getuid());
-
     FILE *fp;
     if((fp = fopen("answer","a+")) == NULL){
         fprintf(stderr,"Cannot open answer\n");
@@ -14,8 +12,9 @@ int main() {
     }
     fclose(fp);
 
+    setuid(getuid());
+
     printf("%5ld, %5ld\n", getuid(), geteuid());
-    
     if((fp = fopen("answer","a+")) == NULL){
         fprintf(stderr,"Cannot open answer\n");
         perror("Error");
