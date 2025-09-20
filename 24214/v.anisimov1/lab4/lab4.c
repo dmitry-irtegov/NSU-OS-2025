@@ -31,18 +31,20 @@ void ClearList (ListNode* head)
 	while (curr_node != NULL)
 	{
 		last_node = curr_node; 
-		curr_node = last_node->next; 
-		free(last_node); 
+		curr_node = last_node->next;
+		free(last_node->val);   
+		free(last_node);
 	}
 }
 
 int main()
 {
-	char* buffer = (char*) malloc (sizeof(char) * BUFF_SIZE); 
+	char buffer[BUFF_SIZE]; 
 	fgets(buffer, BUFF_SIZE, stdin); 
 	ListNode* head = NULL; 
 	ListNode* last_node; 
 	ListNode* curr_node; 
+	int null_sig = 0; 
 	while (buffer[0] != '.')
 	{
 		buffer[MAX_SIZE] = '\0';
@@ -53,7 +55,15 @@ int main()
 		if (head == NULL) 
 		{
 			head = (ListNode*) malloc (sizeof(ListNode)); 
+			if (head == NULL) {
+				null_sig = 1; 
+				break; 
+			} 
 			head->val = (char*) malloc (strnlen(buffer, MAX_SIZE) + 1); 
+			if (head->val == NULL) {
+				null_sig = 1; 
+				break; 
+			}
 			strcpy(head->val, buffer); 
 			head->next = NULL; 
 			last_node = head; 
@@ -61,20 +71,33 @@ int main()
 		else 
 		{
 			curr_node = (ListNode*) malloc (sizeof(ListNode)); 
+			if (curr_node == NULL) {
+				null_sig = 1; 
+				break; 
+			}
 			last_node->next = curr_node; 
 			curr_node->val = (char*) malloc (strnlen(buffer, MAX_SIZE) + 1);
+			if (curr_node == NULL) {
+				null_sig = 1; 
+				break; 
+			}
 			strcpy(curr_node->val, buffer); 
 			curr_node->next = NULL; 
 			last_node = curr_node; 
 		}
 		fgets(buffer, MAX_SIZE + 1, stdin);
 	}
-	free(buffer); 
+	if (null_sig) {
+		printf("Cannot allocate memory: NULL is returned\n"); 
+		ClearList(head); 
+		return 0; 
+	}
 	printf("\n####\n");
 	printf("Strings");
 	printf("\n####\n");
 	PrintStrings(head); 
 	printf("####\n"); 
 	ClearList(head); 
-	printf("\n...Memory has been cleaned...\n"); 
+	printf("\n...Memory has been cleaned...\n");
+	return 0; 
 }
