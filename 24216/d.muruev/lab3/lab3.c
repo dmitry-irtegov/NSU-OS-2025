@@ -16,7 +16,6 @@ void print_ids(const char* filename) {
     if (fp == NULL) {
         perror("fopen error");
     } else {
-        printf("File opened successfully\n");
         fclose(fp);
     }
 }
