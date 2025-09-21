@@ -25,9 +25,9 @@ int main() {
     uid_t real_uid = getuid();
     if (setuid(real_uid) == -1) {
         perror("setuid error");
-        return 1;
+        exit(EROR_);
     }
 
     print_ids(filename);
-    return 0;
+    exit(0);
 }
