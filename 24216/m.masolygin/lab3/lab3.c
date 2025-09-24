@@ -1,27 +1,20 @@
-#include <sys/types.h>
-#include <stdio.h>
-#include <unistd.h>
 #include <errno.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-void open_file(char *filename)
-{
+void open_file(char *filename) {
     FILE *file = fopen(filename, "r");
-    if (file == NULL)
-    {
-        perror("Error opening file");
-    }
-    else
-    {
+    if (file) {
         printf("File opened successfully\n");
-        if (fclose(file) != 0)
-        {
-            perror("Error closing file");
-        }
+        fclose(file);
+    } else {
+        perror("Error opening file");
+        exit(1);
     }
 }
 
-int main()
-{
+int main() {
     uid_t real = getuid();
     uid_t effective = geteuid();
     char *filename = "file";
@@ -30,8 +23,7 @@ int main()
     printf("Effective UID: %d\n", effective);
     open_file(filename);
 
-    if (setuid(real) != 0)
-    {
+    if (setuid(real) != 0) {
         perror("Error setting real UID");
         return 1;
     }
