@@ -20,7 +20,7 @@ void main()
         fclose(f);
     }
 
-    if (setuid(geteuid()) < 0) {
+    if (seteuid(getuid()) < 0) {
         perror("setuid");
         exit(EXIT_FAILURE);
     }
@@ -33,6 +33,10 @@ void main()
     if (f == NULL) {
         perror("fopen");
     } else {
+        char buf[128];
+	if (fgets(buf, sizeof(buf), f)) {
+            printf("%s\n", buf);
+        }
         fclose(f);
     }
 }
