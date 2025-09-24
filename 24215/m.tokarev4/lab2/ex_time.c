@@ -9,8 +9,8 @@ int main()
     time_t now;
     struct tm* sp;
 
-    _putenv("TZ=PST8PDT");
-    _tzset();
+    putenv("TZ=PST8PDT");
+    tzset();
 
     (void)time(&now);
 
