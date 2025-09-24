@@ -67,7 +67,6 @@ int main(int argc, char** argv) {
             perror("Something went wrong with ctime");
             exit(1);
         }
-        mtime[strlen(mtime) - 2] = '\0'; // delete '\n'
         printf("%s ", mtime);
 
         printf("%s\n", basename(argv[i]));
