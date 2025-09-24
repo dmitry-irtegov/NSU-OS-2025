@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include "shell.h"
 #include <stdlib.h>
+#include <fcntl.h>
 char *infile, *outfile, *appfile;
 struct command cmds[MAXCMDS];
 char bkgrnd;
@@ -24,6 +25,9 @@ int main(int argc, char *argv[])
     while (promptline(prompt, line, sizeof(line)) > 0)
     { /*
 until eof  */
+
+        cleanup_zombies();
+
         if ((ncmds = parseline(line)) <= 0)
             continue; /* read next line */
 #ifdef DEBUG
@@ -49,6 +53,42 @@ until eof  */
                 perror("Error fork");
                 exit(1);
             case 0:
+                if (infile && i == 0)
+                {
+                    int fd = open(infile, O_RDONLY);
+                    if (fd == -1)
+                    {
+                        perror("Error opening input file");
+                        exit(1);
+                    }
+                    dup2(fd, STDIN_FILENO);
+                    close(fd);
+                }
+
+                if (outfile && i == ncmds - 1)
+                {
+                    int fd = open(outfile, O_CREAT | O_WRONLY | O_TRUNC, 0644);
+                    if (fd == -1)
+                    {
+                        perror("Error opening output file");
+                        exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+
+                if (appfile && i == ncmds - 1)
+                {
+                    int fd = open(appfile, O_CREAT | O_WRONLY | O_APPEND, 0644);
+                    if (fd == -1)
+                    {
+                        perror("Error opening append file");
+                        exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+
                 execvp(cmds[i].cmdargs[0], cmds[i].cmdargs);
                 perror("Error execvp");
                 exit(1);

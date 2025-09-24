@@ -30,3 +30,16 @@ void handler_child(int pid)
     }
 #endif
 }
+
+void cleanup_zombies()
+{
+    pid_t pid;
+    int status;
+
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
+    {
+#ifdef DEBUG
+        printf("Background process PID: %d finished\n", pid);
+#endif
+    }
+}

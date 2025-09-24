@@ -20,3 +20,4 @@ extern char bkgrnd;
 int parseline(char *);
 int promptline(char *, char *, int);
 void handler_child(int);
+void cleanup_zombies(void);
