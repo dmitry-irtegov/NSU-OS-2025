@@ -1,10 +1,10 @@
-package commandExec
+package execute
 
 import (
 	"fmt"
 	"os"
 	"os/exec"
-	"shell/internal/prompt"
+	"shell/internal/process"
 	"syscall"
 )
 
@@ -15,70 +15,78 @@ func safeClose(file *os.File) {
 	}
 }
 
-func (command *Command) Fork(pmpt prompt.Prompt) {
+func (command *Command) Run(pm *process.ProcessManager) (int, bool) {
 	stdin := os.Stdin
 	stdout := os.Stdout
 	stderr := os.Stderr
+	var inPipeLine bool
 
-	binnaryPath, err := exec.LookPath(command.Cmdargs[0])
+	binaryPath, err := exec.LookPath(command.Cmdargs[0])
 	if err != nil {
 		fmt.Println(command.Cmdargs[0], " not found in $PATH")
-		return
+		return 0, false
 	}
 
 	if command.Infile != "" {
 		stdin, err = os.OpenFile(command.Infile, os.O_RDONLY, 0)
 		if err != nil {
 			fmt.Println(err)
-			return
+			return 0, false
 		}
-		defer safeClose(stdin)
 	}
 
 	if command.Outfile != "" {
 		stdout, err = os.OpenFile(command.Outfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
 			fmt.Println(err)
-			return
+			return 0, false
 		}
-		defer safeClose(stdout)
 	}
 
 	if command.Appfile != "" {
 		stdout, err = os.OpenFile(command.Appfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
 			fmt.Println(err)
-			return
+			return 0, false
 		}
-		defer safeClose(stdout)
 	}
 
-	pid, err := syscall.ForkExec(binnaryPath, command.Cmdargs, &syscall.ProcAttr{
+	if command.InPipe != nil {
+		stdin = command.InPipe
+		inPipeLine = true
+	}
+
+	if command.OutPipe != nil {
+		stdout = command.OutPipe
+		inPipeLine = true
+	}
+
+	pid, err := syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
 		Dir:   "",
 		Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
+		Sys: &syscall.SysProcAttr{
+			Setpgid: true,
+		},
 	})
+
+	if stdin != os.Stdin {
+		safeClose(stdin)
+	}
+	if stdout != os.Stdout {
+		safeClose(stdout)
+	}
+
 	if err != nil {
 		fmt.Println(err)
-		return
+		return 0, false
 	}
-	if command.Bkgrnd == 1 {
+	if command.Bkgrnd {
 		fmt.Println("PID: ", pid)
-		go func(pt prompt.Prompt) {
-			var ws syscall.WaitStatus
-			_, err := syscall.Wait4(pid, &ws, 0, nil)
-			if err != nil {
-				fmt.Println("Error waiting process", err)
-				return
-			}
-			fmt.Println("Done ", pid)
-			pt.PrintPrompt()
-		}(pmpt)
+		go pm.Wait(pid, true)
+		fmt.Println("Done ", pid)
+		pm.Prompt.PrintPrompt()
 	} else {
-		var ws syscall.WaitStatus
-		_, err := syscall.Wait4(pid, &ws, 0, nil)
-		if err != nil {
-			fmt.Println("Error waiting process", err)
-			return
-		}
+		pm.Wait(pid, false)
 	}
+	return pid, inPipeLine
 }

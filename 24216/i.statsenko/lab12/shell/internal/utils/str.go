@@ -1,4 +1,4 @@
-package strWork
+package utils
 
 import (
 	"bufio"

@@ -1,14 +1,13 @@
 package main
 
 import (
+	"os/signal"
 	"shell/internal/shell"
+	"syscall"
 )
 
 func main() {
-	shell.Shell()
+	signal.Ignore(syscall.SIGTSTP)
+	sh := shell.NewShell()
+	sh.Run()
 }
-
-/*
-1) какие ошибки синтаксиса мы должны отлавливать
-2) cd set и т д
-*/
