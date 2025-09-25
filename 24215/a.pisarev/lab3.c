@@ -28,5 +28,6 @@ int main()
 	 else{
 	 	fclose(fd);
 	 }
-	 
+	 return 0;
 }
+
