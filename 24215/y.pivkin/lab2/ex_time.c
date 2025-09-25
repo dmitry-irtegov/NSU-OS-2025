@@ -5,7 +5,7 @@
 #include <stdlib.h>
 extern char *tzname[];
 
-int main(){
+main(){
     setenv("TZ", "US/Pacific", 1);
     tzset();
 
@@ -25,5 +25,5 @@ int main(){
         pst->tm_min,
         tzname[pst->tm_isdst]);
 
-    return 0;
+    exit(0);
 }
