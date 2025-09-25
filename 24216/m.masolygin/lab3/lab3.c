@@ -5,13 +5,12 @@
 
 void open_file(char *filename) {
     FILE *file = fopen(filename, "r");
-    if (file) {
-        printf("File opened successfully\n");
-        fclose(file);
-    } else {
+    if (!file) {
         perror("Error opening file");
         exit(1);
     }
+    printf("File opened successfully\n");
+    fclose(file);
 }
 
 int main() {
