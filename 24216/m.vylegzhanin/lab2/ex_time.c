@@ -1,21 +1,29 @@
-#include <sys/types.h>
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
-extern char *tzname[];
 
-main()
-{
+int main(void){
     time_t now;
-    struct tm *sp;
-    (void) time( &now );
-    setenv("TZ", "PST8PDT", 1);
-    printf("%s", ctime( &now ) );
+    
+    if (time(&now) == (time_t)-1) {
+        perror("Failed to get current time");
+        exit(EXIT_FAILURE);
+    }
+    
+    if (setenv("TZ", "America/Los_Angeles", 1) == -1) {
+        perror("Failed to set environment variable");
+        exit(EXIT_FAILURE);
+    }
+    
+    tzset();
 
-    // sp = localtime(&now);
-    // printf("%d/%d/%02d %d:%02d %s\n",
-    //     sp->tm_mon + 1, sp->tm_mday,
-    //     sp->tm_year, sp->tm_hour,
-    //     sp->tm_min, tzname[sp->tm_isdst]);
-    exit(0);
+    char *time_str = ctime(&now);
+    if (time_str == NULL) {
+        fprintf(stderr, "Failed to convert time to string\n");
+        exit(EXIT_FAILURE);
+    }
+    
+    printf("%s", time_str);
+    
+    return EXIT_SUCCESS;
 }
