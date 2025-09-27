@@ -35,5 +35,5 @@ int main(){
     
     check_file(filename);
 
-    exit(EXIT_SUCCESS); // Более явно, чем exit(EXIT_SUCCESS)
+    exit(EXIT_SUCCESS); 
 }
