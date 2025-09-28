@@ -7,7 +7,7 @@ void check_file(const char* filename){
     FILE* file;
     if ((file = fopen(filename, "r")) == NULL) {
         perror("Не получилось открыть файл");
-        exit(EXIT_FAILURE);  
+        return;
     }
     printf("File opened.\n");
     fclose(file);
