@@ -5,12 +5,13 @@
 extern char *tzname[];
 int main()
 {
-    
-    setenv("TZ", "America/Los_Angeles", 1);
-    tzset();
 
-    //как раоатет 
-    //и вывести
+    if (setenv("TZ", "America/Los_Angeles", 1) != 0) {
+        perror("Error set_env");
+        exit(1);
+    }
+
+    tzset();
 
     time_t now;
     struct tm *sp;
