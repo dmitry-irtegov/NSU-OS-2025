@@ -1,0 +1,9 @@
+CompileFlags:
+        Add: [-xc++, -std=c++17, -Wall, -Wextra]
+
+---
+If:
+        PathMatch: "posix_process.hpp"
+CompileFlags:
+        Add: [-DPOSIX_PROCESS_IMPLEMENTATION]
+---
