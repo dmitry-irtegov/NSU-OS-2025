@@ -3,16 +3,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 #define CAP 20
+#define BLOCK_SIZE 50
 #define BUFF_SIZE 101
 #define MAX_ROW_SIZE 100
 #define RECORD_SIZE sizeof(record)
 #define READ_ERROR -112
 #define EMPTY_FILE -323
 #define REALLOC_ERROR -142
-#define INIT_TABLE \
-rowTable.capacity = CAP;\
-rowTable.size = 0;\
-rowTable.values = (record*) malloc(RECORD_SIZE * rowTable.capacity); 
 
 typedef struct record {
 	off_t padding;
@@ -47,23 +44,26 @@ void PrintTable (dynamic_table* table) {
 }
 
 int CreateTable(dynamic_table* table, int file) {
-	off_t readBytes = 0, padding = 0;
+	off_t readBytes = 0, padding = 0, processedBytes = 0;
 	int avCode; 
 	size_t stringSize = 0;
-	char symbol; 
-	ssize_t readCode = read(file, &symbol, 1);
+	char buffer[BLOCK_SIZE];
+	ssize_t readCode = read(file, buffer, BLOCK_SIZE);
 	while (readCode > 0) {
-		readBytes++; 
-		if (symbol == '\n') {
-			avCode = AddValue(table, padding, stringSize); 
-			if (avCode == REALLOC_ERROR) 
-				return REALLOC_ERROR; // проверека на корректное добавление новой строки в таблицу 
-			stringSize = 0; 
-			padding = readBytes; 
-		}
-		else 
-			stringSize++;
-		readCode = read(file, &symbol, 1);
+		readBytes += (off_t) readCode;
+		for (ssize_t i = 0; i < readCode; i++) {
+			processedBytes++; 
+			if (buffer[i] == '\n') {
+				avCode = AddValue(table, padding, stringSize); 
+				if (avCode == REALLOC_ERROR) 
+					return REALLOC_ERROR; // проверека на корректное добавление новой строки в таблицу 
+				stringSize = 0; 
+				padding = processedBytes; 
+			}
+			else 
+				stringSize++; 
+		} 
+		readCode = read(file, buffer, BLOCK_SIZE);
 	}
 	if (readCode == -1) 
 		return READ_ERROR; 
@@ -85,8 +85,7 @@ int main()
 		perror("Cannot open the file\n");
 		return 0; 
 	}
-	dynamic_table rowTable; 
-	INIT_TABLE
+	dynamic_table rowTable = {0, (record*) malloc(RECORD_SIZE * rowTable.capacity), CAP}; 
 	if (rowTable.values == NULL) {
 		printf("Cannot create array for the table\n"); 
 		csCode = close(file); 
