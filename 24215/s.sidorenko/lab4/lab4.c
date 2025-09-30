@@ -50,12 +50,13 @@ int main()
     }
 
     printf("\nYour strings: \n");
-    for(Node *temp = head; temp; temp = temp->next)
+    Node *temp;
+    for(temp = head; temp; temp = temp->next)
     {
         printf("%s\n", temp->el);
     }
 
-    Node *temp = head;
+    temp = head;
     while(temp)
     {
         Node *next = temp->next;
