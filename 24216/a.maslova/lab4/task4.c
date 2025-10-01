@@ -76,7 +76,9 @@ char* read_line() {
     }
 
     if (line == NULL) {
-        return NULL;
+        line = malloc(1);
+	line[0] = '\0';
+	return line;
     }
 
     line = realloc(line, len + 1);
@@ -91,7 +93,7 @@ int main() {
     while(1) {
         char* line = read_line();
         if (line == NULL) { 
-            break;
+            continue;
         }
 
         if (line[0] == '.') {
