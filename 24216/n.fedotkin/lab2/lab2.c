@@ -5,7 +5,6 @@
 
 int main() {
     time_t now;
-    struct tm *sp;
 
     int result = putenv("TZ=America/Los_Angeles");
     if (result != 0) {
