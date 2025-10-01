@@ -4,63 +4,62 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"shell/internal/process"
+	"strings"
 	"syscall"
 )
 
-func safeClose(file *os.File) {
-	err := file.Close()
+func (command *Command) Run(pm *process.Manager) error {
+	isShellCmd, err := command.shellCommands()
 	if err != nil {
-		fmt.Println("Error closing file:", err)
+		return err
 	}
-}
-
-func (command *Command) Run(pm *process.ProcessManager) (int, bool) {
+	if isShellCmd {
+		return nil
+	}
 	stdin := os.Stdin
 	stdout := os.Stdout
 	stderr := os.Stderr
-	var inPipeLine bool
 
 	binaryPath, err := exec.LookPath(command.Cmdargs[0])
 	if err != nil {
-		fmt.Println(command.Cmdargs[0], " not found in $PATH")
-		return 0, false
+		return fmt.Errorf("%s not found in $PATH", command.Cmdargs[0])
 	}
 
 	if command.Infile != "" {
 		stdin, err = os.OpenFile(command.Infile, os.O_RDONLY, 0)
 		if err != nil {
-			fmt.Println(err)
-			return 0, false
+			return err
+		}
+	} else if command.Bkgrnd {
+		stdin, err = os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+		if err != nil {
+			return err
 		}
 	}
 
 	if command.Outfile != "" {
 		stdout, err = os.OpenFile(command.Outfile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 		if err != nil {
-			fmt.Println(err)
-			return 0, false
+			return err
 		}
 	}
 
 	if command.Appfile != "" {
 		stdout, err = os.OpenFile(command.Appfile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		if err != nil {
-			fmt.Println(err)
-			return 0, false
+			return err
 		}
 	}
 
 	if command.InPipe != nil {
 		stdin = command.InPipe
-		inPipeLine = true
 	}
 
 	if command.OutPipe != nil {
 		stdout = command.OutPipe
-		inPipeLine = true
 	}
-
 	pid, err := syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
 		Dir:   "",
 		Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
@@ -68,25 +67,70 @@ func (command *Command) Run(pm *process.ProcessManager) (int, bool) {
 			Setpgid: true,
 		},
 	})
-
+	if err != nil {
+		return err
+	}
 	if stdin != os.Stdin {
-		safeClose(stdin)
+		_ = stdin.Close()
 	}
 	if stdout != os.Stdout {
-		safeClose(stdout)
+		_ = stdout.Close()
 	}
 
-	if err != nil {
-		fmt.Println(err)
-		return 0, false
+	data := process.ProcessData{
+		Background: command.Bkgrnd,
 	}
 	if command.Bkgrnd {
 		fmt.Println("PID: ", pid)
-		go pm.Wait(pid, true)
+		go pm.Wait(pid, data)
 		fmt.Println("Done ", pid)
 		pm.Prompt.PrintPrompt()
 	} else {
-		pm.Wait(pid, false)
+		pm.Wait(pid, data)
 	}
-	return pid, inPipeLine
+	return nil
+}
+
+func (command *Command) shellCommands() (bool, error) {
+	switch command.Cmdargs[0] {
+	case "cd":
+		if len(command.Cmdargs) != 2 {
+			return true, fmt.Errorf("cd: неверное количество аргументов")
+		}
+		curPath, err := os.Getwd()
+		if err != nil {
+			return true, err
+		}
+		path := filepath.Clean(filepath.Join(curPath, command.Cmdargs[1]))
+		err = os.Chdir(path)
+		if err != nil {
+			return true, err
+		}
+		return true, nil
+	case "exit":
+		return true, ErrExit
+	case "export":
+		if len(command.Cmdargs) != 2 {
+			return true, fmt.Errorf("export: неверное количество аргументов")
+		}
+		variable := strings.Split(command.Cmdargs[1], "=")
+		if len(variable) != 2 {
+			return true, fmt.Errorf("export: неверный формат переменной")
+		}
+		err := os.Setenv(variable[0], variable[1])
+		if err != nil {
+			return true, err
+		}
+		return true, nil
+	case "unset":
+		if len(command.Cmdargs) != 2 {
+			return true, fmt.Errorf("unset: неверное количество аргументов")
+		}
+		err := os.Unsetenv(command.Cmdargs[1])
+		if err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	return false, nil
 }

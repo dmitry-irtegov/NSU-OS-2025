@@ -10,15 +10,19 @@ import (
 	"syscall"
 )
 
-type ProcessManager struct {
-	processes map[int]bool // [pgid]background
+type ProcessData struct {
+	Background bool
+}
+
+type Manager struct {
+	processes map[int]*ProcessData // [pid]processData
 	mu        sync.Mutex
 	Prompt    prompt.Prompt
 }
 
-func NewProcessManager(prompt prompt.Prompt) *ProcessManager {
-	pm := &ProcessManager{
-		processes: make(map[int]bool),
+func NewProcessManager(prompt prompt.Prompt) *Manager {
+	pm := &Manager{
+		processes: make(map[int]*ProcessData),
 		Prompt:    prompt,
 	}
 	go pm.handleStopSignals()
@@ -26,110 +30,107 @@ func NewProcessManager(prompt prompt.Prompt) *ProcessManager {
 	return pm
 }
 
-//func (pm *ProcessManager) AddGroup(pgid int, background bool) {
-//	pm.mu.Lock()
-//	pm.processes[pgid] = background
-//	pm.mu.Unlock()
-//}
-
 // only with mu lock
-func (pm *ProcessManager) handleKillerror(err error, pgid int) error {
+func (pm *Manager) handleKillerror(err error, pid int) error {
 	if err != nil {
 		if !errors.Is(err, syscall.ESRCH) {
 			return err
 		}
-		delete(pm.processes, pgid)
+		delete(pm.processes, pid)
 	}
 	return nil
 }
 
 // only with mu lock
-func (pm *ProcessManager) interruptFGroup(pgid int) error {
-	if background, _ := pm.processes[pgid]; !background {
-		err := syscall.Kill(pgid, syscall.SIGINT)
-		if pm.handleKillerror(err, pgid) != nil {
+func (pm *Manager) interruptFGroup(pid int) error {
+	if data := pm.processes[pid]; !data.Background {
+
+		err := syscall.Kill(pid, syscall.SIGINT)
+		if pm.handleKillerror(err, pid) != nil {
 			return err
 		}
-		fmt.Fprint(os.Stderr, "\nProcess", pgid, "interrupted")
-		delete(pm.processes, pgid)
+
+		fmt.Println("\nProcess", pid, "interrupted")
+		delete(pm.processes, pid)
 	}
 	return nil
 }
 
 // only with mu lock
-func (pm *ProcessManager) toBackgroundGroup(pgid int) error {
-	if background, _ := pm.processes[pgid]; !background {
-		err := syscall.Kill(pgid, syscall.SIGSTOP)
-		if pm.handleKillerror(err, pgid) != nil {
+func (pm *Manager) toBackgroundGroup(pid int) error {
+	if data := pm.processes[pid]; !data.Background {
+		err := syscall.Kill(pid, syscall.SIGSTOP)
+		if pm.handleKillerror(err, pid) != nil {
 			return err
 		}
-		pm.processes[pgid] = true
-		err = syscall.Kill(pgid, syscall.SIGCONT)
-		if pm.handleKillerror(err, pgid) != nil {
+		pm.processes[pid].Background = true
+		err = syscall.Kill(pid, syscall.SIGCONT)
+		if pm.handleKillerror(err, pid) != nil {
 			return err
 		}
-		fmt.Fprint(os.Stderr, "\nProcess ", pgid, " moved to background\n")
+
+		fmt.Fprint(os.Stderr, "\nProcess ", pid, " moved to background\n")
 	}
 	return nil
 }
 
-func (pm *ProcessManager) handleInterruptSignals() {
+func (pm *Manager) handleInterruptSignals() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGQUIT)
 	for sig := range c {
-		fmt.Println("Получен сигнал:", sig)
 		if sig == syscall.SIGQUIT {
 			continue
 		}
 		pm.mu.Lock()
-		for pgid := range pm.processes {
-			fmt.Println(pgid)
-			err := pm.interruptFGroup(pgid)
+		for pid := range pm.processes {
+			fmt.Println(pid)
+			err := pm.interruptFGroup(pid)
 			if err != nil {
-				fmt.Println("Не удалось прервать процесс", pgid, "по причине:", err)
+				fmt.Println("Не удалось прервать процесс", pid, "по причине:", err)
 			}
 		}
 		pm.mu.Unlock()
 	}
 }
 
-func (pm *ProcessManager) handleStopSignals() {
+func (pm *Manager) handleStopSignals() {
 	c := make(chan os.Signal, 1)
 
 	signal.Notify(c, syscall.SIGTSTP)
 
-	for range c {
-		fmt.Println("Получен сигнал: SIGTSTP")
+	for sig := range c {
+		fmt.Println("Получен сигнал: ", sig)
 		pm.mu.Lock()
-		for pgid := range pm.processes {
-			err := pm.toBackgroundGroup(pgid)
+		for pid := range pm.processes {
+			fmt.Println("переводим процесс", pid, "в фоновый режим")
+			err := pm.toBackgroundGroup(pid)
 			if err != nil {
-				fmt.Println("Не удалось перевести процесс", pgid, "в фоновый режим по причине:", err)
+				fmt.Println("Не удалось перевести процесс", pid, "в фоновый режим по причине:", err)
 			}
 		}
 		pm.mu.Unlock()
 	}
 }
 
-func (pm *ProcessManager) KillAll() {
+func (pm *Manager) KillAll() {
 	pm.mu.Lock()
-	for pgid := range pm.processes {
-		fmt.Println("kill:", pgid)
-		_ = syscall.Kill(pgid, syscall.SIGKILL)
+	for pid := range pm.processes {
+		fmt.Println("kill:", pid)
+		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 	pm.mu.Unlock()
 }
 
-func (pm *ProcessManager) Wait(pgid int, background bool) {
+func (pm *Manager) Wait(pid int, data ProcessData) {
 	pm.mu.Lock()
-	pm.processes[pgid] = background
+	pm.processes[pid] = &data
 	pm.mu.Unlock()
 	var ws syscall.WaitStatus
-	_, err := syscall.Wait4(pgid, &ws, 0, nil)
+	_, err := syscall.Wait4(pid, &ws, 0, nil)
 	if err != nil {
-		fmt.Println("Ошибка ожидания процесса: ", pgid)
+		fmt.Println("Ошибка ожидания процесса: ", pid)
 	}
 	pm.mu.Lock()
-	delete(pm.processes, pgid)
+	delete(pm.processes, pid)
 	pm.mu.Unlock()
 }

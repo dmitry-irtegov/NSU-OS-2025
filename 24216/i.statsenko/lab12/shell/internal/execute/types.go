@@ -1,6 +1,7 @@
 package execute
 
 import (
+	"errors"
 	"os"
 )
 
@@ -16,3 +17,5 @@ type Command struct {
 	Pipe                     bool
 	InPipe, OutPipe          *os.File
 }
+
+var ErrExit = errors.New("exit")
