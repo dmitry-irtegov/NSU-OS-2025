@@ -24,10 +24,8 @@ void get_id()
 int main() {
 
     get_id();
-    // Открываем файл для проверки доступа
     FILE *file1 = fopen("file", "r");
     try_open(file1);
-    // Устанавливаем эффективный UID, чтобы совпадал с реальным
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
         exit(1);
@@ -35,8 +33,6 @@ int main() {
 
     printf("After setuid:\n");
     get_id();
-    
-    // Открываем файл для проверки доступа
     FILE *file2 = fopen("file", "r");
     try_open(file2);
 }
