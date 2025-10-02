@@ -6,11 +6,10 @@ void fileOpen(const char *filename) {
     FILE *f = fopen(filename, "r+");
     if (f == NULL) {
         perror("can't open file");
+        exit(1);
     } 
-    else {
-        printf("file opened successfully\n");
-        fclose(f);
-    }
+    printf("file opened successfully\n");
+    fclose(f);
 }
 
 void printUID() {
@@ -23,7 +22,7 @@ int main(void) {
     printUID();
     fileOpen(filename);
 
-    if (setuid(getuid()) == -1) {
+    if (setuid(getuid()) != 0) {
         perror("setuid(getuid()) failed");
         exit(EXIT_FAILURE);
     }
