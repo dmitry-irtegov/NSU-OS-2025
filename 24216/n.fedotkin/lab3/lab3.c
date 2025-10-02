@@ -6,9 +6,10 @@ void checkOpenFile(const char* nameFile) {
     FILE* file = fopen(nameFile, "rw");
     if (file == NULL) {
         perror("Error opening file");
+        return;
     }
-    printf("File opened successfully\n");
     fclose(file);
+    printf("File opened successfully\n");
 }
 
 int main() {
@@ -17,7 +18,6 @@ int main() {
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
 
-    
     checkOpenFile(nameFile);
 
     int res = setuid(getuid());
