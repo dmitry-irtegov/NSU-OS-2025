@@ -15,9 +15,10 @@ void print_ids(const char* filename) {
     fp = fopen(filename, "r");
     if (fp == NULL) {
         perror("fopen error");
-    } else {
-        fclose(fp);
+        return;
     }
+
+    fclose(fp);
 }
 
 int main() {
