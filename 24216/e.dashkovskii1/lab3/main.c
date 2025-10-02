@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 void try_open(const char *filename) {
     FILE *file = fopen(filename, "r+");
