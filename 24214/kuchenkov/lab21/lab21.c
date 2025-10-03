@@ -6,6 +6,7 @@
 int count = 0;
 
 void signal_handler(int signal_number) {
+    signal(signal_number, signal_handler);
     if (signal_number == SIGINT) {
         printf("\a");
         fflush(stdout);
