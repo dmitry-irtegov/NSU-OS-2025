@@ -85,7 +85,7 @@ int main()
 		perror("Cannot open the file\n");
 		return 0; 
 	}
-	dynamic_table rowTable = {0, (record*) malloc(RECORD_SIZE * rowTable.capacity), CAP}; 
+	dynamic_table rowTable = {0, (record*) malloc(RECORD_SIZE * CAP), CAP}; 
 	if (rowTable.values == NULL) {
 		printf("Cannot create array for the table\n"); 
 		csCode = close(file); 
