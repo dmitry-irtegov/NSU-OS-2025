@@ -11,7 +11,7 @@ void signal_handler(int signal_number) {
         fflush(stdout);
         count++;
     } else if (signal_number == SIGQUIT) {
-        printf("Сделано %d сигналов", count);
+        printf("%d signals were made", count);
         exit(0);
     }
 }
