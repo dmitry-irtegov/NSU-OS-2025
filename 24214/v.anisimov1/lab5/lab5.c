@@ -4,8 +4,7 @@
 #include <stdlib.h>
 #define CAP 20
 #define BLOCK_SIZE 50
-#define BUFF_SIZE 101
-#define MAX_ROW_SIZE 100
+#define MAX_ROW_SIZE 
 #define RECORD_SIZE sizeof(record)
 #define READ_ERROR -112
 #define EMPTY_FILE -323
@@ -40,7 +39,7 @@ int AddValue (dynamic_table* table, off_t point, size_t size) {
 
 void PrintTable (dynamic_table* table) {
 	for (size_t i = 0; i < table->size; i++)
-		printf("Row[%lu]: padding = %ld length = %lu\n", i, table->values[i].padding, table->values[i].size);
+		printf("Row[%lu]: padding = %ld length = %lu\n", i + 1, table->values[i].padding, table->values[i].size);
 }
 
 int CreateTable(dynamic_table* table, int file) {
@@ -77,6 +76,15 @@ int CreateTable(dynamic_table* table, int file) {
 	return 1; // таблица без проблем создалась 
 } 
 
+size_t FindMaxLength(dynamic_table* table) {
+	size_t maxLength = 0; 
+	for (size_t i = 0; i < table->size; ++i) {
+		if (table->values[i].size > maxLength)
+			maxLength = table->values[i].size;
+	}
+	return maxLength;
+}
+
 int main()
 {
 	int file = open("test.txt", O_RDONLY); 
@@ -88,6 +96,7 @@ int main()
 	dynamic_table rowTable = {0, (record*) malloc(RECORD_SIZE * CAP), CAP}; 
 	if (rowTable.values == NULL) {
 		printf("Cannot create array for the table\n"); 
+		free(rowTable.values);
 		csCode = close(file); 
 		if (csCode == -1) 
 			printf("Closing file error...\n");
@@ -125,16 +134,17 @@ int main()
 		ssize_t readCode;    
 		off_t lskCode; 
 		size_t rowSize; 
+		size_t maxLength = FindMaxLength(&rowTable);
 		printf("Enter the query amount: ");  
 		scanf("%d", &qAmount);
-		char row[BUFF_SIZE]; 
+		char row[maxLength + 1]; 
 		for (int query = 1; qAmount > 0 && query <= qAmount; query++) {
 			scanf("%d", &rowNum);
 			if (rowNum < 1) {
 				printf("Row number MUST BE positive...\n");
 				continue; 
 			}
-			if (rowNum > rowTable.size) {
+			if ((size_t) rowNum > rowTable.size) {
 				printf("Row number MUST BE lower than table size...\n"); 
 				continue; 
 			}
@@ -151,10 +161,7 @@ int main()
 				return 0;  
 			}
 			rowSize = rowTable.values[rowNum - 1].size; 
-			if (rowSize > MAX_ROW_SIZE) 
-				readCode = read(file, row, MAX_ROW_SIZE);
-			else 
-				readCode = read(file, row, rowSize);
+			readCode = read(file, row, rowSize);
 			if (readCode == 0) {
 				printf("String is empty\n");
 				continue;  
@@ -163,10 +170,7 @@ int main()
 				printf("Reading error...\n");
 				continue;  
 			}
-			if (rowSize > MAX_ROW_SIZE)
-				row[MAX_ROW_SIZE] = '\0';
-			else 
-				row[rowSize] = '\0'; 
+			row[rowSize] = '\0'; 
 			printf("Row: %d - [%s]\n", rowNum, row);
 		} 
 		free(rowTable.values); 
