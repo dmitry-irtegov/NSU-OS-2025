@@ -20,3 +20,4 @@ int main()
 		sp->tm_min,tzname[sp->tm_isdst]);
 	return 0;
 }
+
