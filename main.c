@@ -8,7 +8,7 @@ int main(){
 
     time_t now;
     struct tm *sp;
-    setenv("TZ", "America/Los_Angeles",1);
+    //setenv("TZ", "America/Los_Angeles",1);
     tzset();
     (void)time(&now);
     printf("%s", ctime( &now ) );
