@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
+
 void print_user_ids() {
     uid_t real_uid = getuid();
     uid_t effective_uid = geteuid();
