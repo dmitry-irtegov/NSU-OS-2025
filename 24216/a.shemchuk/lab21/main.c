@@ -27,26 +27,35 @@ int main(void) {
     return 0;
 }
 
+#define IGNORE_ERROR_MESSAGE "failed to ignore SIGINT"
+#define OUTPUT_ERROR_MESSAGE "failed to output beep"
+#define RESTORE_ERROR_MESSAGE "failed to restore SIGINT handler"
+
 void sigcatch_int (int sig) {
     if(signal(sig, SIG_IGN) == SIG_ERR) {
-        perror("sigcatch_int: failed to ignore SIGINT");
-        return;
+        write(2, IGNORE_ERROR_MESSAGE, sizeof(IGNORE_ERROR_MESSAGE));
+        exit(EXIT_FAILURE);
     }
-    if(putchar('\07') == EOF) {
-        perror("sigcatch_int: failed to output beep");
-    }
+    write(1, "\07", sizeof(char));
 
     beep_count++;
 
     if (signal(sig, sigcatch_int) == SIG_ERR) {
-        perror("sigcatch_int: failed to restore SIGINT handler");
+        write(2, RESTORE_ERROR_MESSAGE, sizeof(RESTORE_ERROR_MESSAGE));
+        exit(EXIT_FAILURE);
     }
 }
 
 void sigcatch_quit (int sig) {
     if(signal(sig, SIG_IGN) == SIG_ERR) {
-        perror("sigcatch_quit: failed to ignore SIGQUIT");
+        write(2, IGNORE_ERROR_MESSAGE, sizeof(IGNORE_ERROR_MESSAGE));
+        exit(EXIT_FAILURE);
     }
-    printf("\nbeep count: %d\n", beep_count);
+    char buf[20];
+    int printed;
+    if((printed = snprintf(buf, 20, "\nbeep count: %d\n", beep_count)) < 0) {
+        exit(EXIT_FAILURE);
+    }
+    write(1, buf, printed);
     exit(EXIT_SUCCESS);
 }
