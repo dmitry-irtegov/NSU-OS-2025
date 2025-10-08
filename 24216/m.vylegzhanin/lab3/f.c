@@ -12,14 +12,14 @@ int main(void) {
 
     fp = fopen("file", "r+");
     if (fp == NULL) {
-        perror("first fopen");
+        perror("first fopen crashed");
     } else {
         printf("File opened successfully.\n");
         fclose(fp);
     }
 
     if (setuid(ruid) == -1) {
-        perror("setuid");
+        perror("setuid is crashed");
         exit(EXIT_FAILURE);
     }
 
@@ -29,7 +29,7 @@ int main(void) {
 
     fp = fopen("file", "r+");
     if (fp == NULL) {
-        perror("first fopen");
+        perror("second fopen crashed");
     } else {
         printf("File opened successfully.\n");
         fclose(fp);
