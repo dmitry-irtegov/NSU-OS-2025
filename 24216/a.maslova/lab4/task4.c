@@ -11,16 +11,15 @@ Node* create_node(const char* str) {
     size_t len = strlen(str);
     char* new_str = (char*)malloc(len + 1);
     if (new_str == NULL) {
-        perror("Allocation failed");
-        exit(EXIT_FAILURE);
+        return NULL;
     }
+
     strcpy(new_str, str);
     
     Node* newNode = (Node*)malloc(sizeof(Node));
     if (newNode == NULL) {
         free(new_str);
-        perror("Allocation failed");
-        exit(EXIT_FAILURE);
+        return NULL;
     }
     
     newNode->data = new_str;
@@ -68,8 +67,7 @@ char* read_line() {
             size = size == 0 ? 16 : size * 2;
             line = realloc(line, size);
             if (!line) {
-                perror("Allocation failed");
-                exit(EXIT_FAILURE);
+                return NULL;
             }
         }
         line[len++] = c;
@@ -77,8 +75,11 @@ char* read_line() {
 
     if (line == NULL) {
         line = malloc(1);
-	line[0] = '\0';
-	return line;
+        if (!line) {
+            return NULL;
+        }
+        line[0] = '\0';
+        return line;
     }
 
     line = realloc(line, len + 1);
@@ -92,8 +93,10 @@ int main() {
 
     while(1) {
         char* line = read_line();
-        if (line == NULL) { 
-            continue;
+        if (line == NULL) {
+            perror("Allocation failed");
+            free_list(head);
+            exit(EXIT_FAILURE);
         }
 
         if (line[0] == '.') {
@@ -102,6 +105,12 @@ int main() {
         }
 
         Node* newNode = create_node(line);
+        if (newNode == NULL) {
+            perror("Allocation failed");
+            free(line);
+            free_list(head);
+            exit(EXIT_FAILURE);
+        }
         append_node(&head, &tail, newNode);
         free(line);
     }
