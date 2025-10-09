@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"shell/internal/process"
-	"strings"
 	"syscall"
 )
 
@@ -27,12 +26,13 @@ func (command *Command) Run(pm *process.Manager) error {
 		return fmt.Errorf("%s not found in $PATH", command.Cmdargs[0])
 	}
 
-	if command.Infile != "" {
+	switch {
+	case command.Infile != "":
 		stdin, err = os.OpenFile(command.Infile, os.O_RDONLY, 0)
 		if err != nil {
 			return err
 		}
-	} else if command.Bkgrnd {
+	case command.Bkgrnd:
 		stdin, err = os.OpenFile(os.DevNull, os.O_RDONLY, 0)
 		if err != nil {
 			return err
@@ -109,28 +109,6 @@ func (command *Command) shellCommands() (bool, error) {
 		return true, nil
 	case "exit":
 		return true, ErrExit
-	case "export":
-		if len(command.Cmdargs) != 2 {
-			return true, fmt.Errorf("export: неверное количество аргументов")
-		}
-		variable := strings.Split(command.Cmdargs[1], "=")
-		if len(variable) != 2 {
-			return true, fmt.Errorf("export: неверный формат переменной")
-		}
-		err := os.Setenv(variable[0], variable[1])
-		if err != nil {
-			return true, err
-		}
-		return true, nil
-	case "unset":
-		if len(command.Cmdargs) != 2 {
-			return true, fmt.Errorf("unset: неверное количество аргументов")
-		}
-		err := os.Unsetenv(command.Cmdargs[1])
-		if err != nil {
-			return true, err
-		}
-		return true, nil
 	}
 	return false, nil
 }

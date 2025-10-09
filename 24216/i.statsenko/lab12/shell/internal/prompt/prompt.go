@@ -1,11 +1,20 @@
 package prompt
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
-type Prompt struct {
-	Prmpt string
-}
+type Prompt struct{}
 
 func (p *Prompt) PrintPrompt() {
-	fmt.Print(p.Prmpt)
+	path, err := os.Getwd()
+	if err != nil {
+		fmt.Print("[unknown directory]$ ")
+	}
+	fmt.Print("[", path, "]$ ")
+}
+
+func (p *Prompt) PrintContinueLine() {
+	fmt.Print("> ")
 }

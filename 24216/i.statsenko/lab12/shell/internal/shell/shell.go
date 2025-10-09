@@ -16,13 +16,14 @@ type Shell struct {
 	pmpt        prompt.Prompt
 	procManager *process.Manager
 	parser      *parser.Parser
+	errChan     chan<- error
 }
 
-func NewShell() *Shell {
-	pmpt := prompt.Prompt{fmt.Sprintf("[%s]~ ", os.Args[0])}
-	procManager := process.NewProcessManager(pmpt)
+func NewShell(errChan chan<- error) *Shell {
+	pmpt := prompt.Prompt{}
+	procManager := process.NewProcessManager(pmpt, errChan)
 	pars := parser.NewParser(pmpt)
-	return &Shell{pmpt: pmpt, procManager: procManager, parser: pars}
+	return &Shell{pmpt: pmpt, procManager: procManager, parser: pars, errChan: errChan}
 
 }
 
@@ -33,20 +34,20 @@ func (shell *Shell) Run() {
 	for shell.commands, err = shell.parser.ParseLine(); ; shell.commands, err = shell.parser.ParseLine() {
 
 		if errors.Is(err, io.EOF) {
-			fmt.Println("exit")
+			shell.errChan <- nil
 			return
 		}
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
-
 		err = shell.launchAll()
 		if err != nil {
-			fmt.Println(err)
 			if errors.Is(err, execute.ErrExit) {
+				shell.errChan <- nil
 				return
 			}
+			fmt.Println(err)
 		}
 	}
 }
