@@ -46,14 +46,16 @@ void sigcatch_int (int sig) {
     }
 }
 
+#define BUF_SIZE sizeof("\nbeep count: \n") + sizeof(sig_atomic_t)
+
 void sigcatch_quit (int sig) {
     if(signal(sig, SIG_IGN) == SIG_ERR) {
         write(2, IGNORE_ERROR_MESSAGE, sizeof(IGNORE_ERROR_MESSAGE));
         exit(EXIT_FAILURE);
     }
-    char buf[20];
+    char buf[BUF_SIZE];
     int printed;
-    if((printed = snprintf(buf, 20, "\nbeep count: %d\n", beep_count)) < 0) {
+    if((printed = snprintf(buf, BUF_SIZE, "\nbeep count: %d\n", beep_count)) < 0) {
         exit(EXIT_FAILURE);
     }
     write(1, buf, printed);
