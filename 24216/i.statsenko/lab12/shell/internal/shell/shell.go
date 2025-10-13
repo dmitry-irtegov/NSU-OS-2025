@@ -9,6 +9,7 @@ import (
 	"shell/internal/parser"
 	"shell/internal/process"
 	"shell/internal/prompt"
+	"syscall"
 )
 
 type Shell struct {
@@ -39,6 +40,7 @@ func (shell *Shell) Run() {
 		}
 		if err != nil {
 			fmt.Println(err)
+			shell.errChan <- err
 			continue
 		}
 		err = shell.launchAll()
@@ -55,17 +57,48 @@ func (shell *Shell) Run() {
 func (shell *Shell) launchAll() error {
 	for i := 0; i < shell.commands.Ncmds; i++ {
 		if shell.commands.Cmds[i].Pipe {
-			r, w, err := os.Pipe()
-			if err != nil {
-				return err
+			newI := i
+			for ; newI < shell.commands.Ncmds; newI++ {
+				if shell.commands.Cmds[newI].Pipe {
+					r, w, err := os.Pipe()
+					//defer r.Close()
+					//defer w.Close()
+					if err != nil {
+						return err
+					}
+					shell.commands.Cmds[newI].OutPipe = w
+					shell.commands.Cmds[newI+1].InPipe = r
+				} else {
+					break
+				}
 			}
-			shell.commands.Cmds[i].OutPipe = w
-			shell.commands.Cmds[i+1].InPipe = r
+			pgid, err := shell.commands.Cmds[newI].Run(shell.procManager, 0)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			_ = shell.commands.Cmds[newI].InPipe.Close()
+			for j := newI - 1; j >= i; j-- {
+				_, err := shell.commands.Cmds[j].Run(shell.procManager, pgid)
+				_ = shell.commands.Cmds[j].InPipe.Close()
+				_ = shell.commands.Cmds[j].OutPipe.Close()
+				if err != nil {
+					fmt.Println(err)
+					_ = syscall.Kill(-pgid, syscall.SIGKILL)
+				}
+			}
+			shell.commands.Cmds[newI].Wait(shell.procManager, -pgid)
+			i = newI
+			continue
 		}
-		err := shell.commands.Cmds[i].Run(shell.procManager)
-		if err != nil {
+		pid, err := shell.commands.Cmds[i].Run(shell.procManager, 0)
+		switch {
+		case err != nil:
 			return err
+		case pid != -1:
+			shell.commands.Cmds[i].Wait(shell.procManager, pid)
 		}
+
 	}
 	shell.commands.Ncmds = 0
 	shell.commands.Cmds = shell.commands.Cmds[:0]
