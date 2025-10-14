@@ -8,7 +8,6 @@ import (
 	"shell/internal/prompt"
 	"sync"
 	"syscall"
-	"time"
 	"unsafe"
 )
 
@@ -46,40 +45,33 @@ func NewProcessManager(prompt prompt.Prompt, errChan chan<- error) *Manager {
 }
 
 // only with mu lock
-func (pm *Manager) handleKillerror(err error, pid pgid) error {
+func (pm *Manager) handleKillerror(err error) error {
 	if err != nil {
 		if !errors.Is(err, syscall.ESRCH) {
 			return err
 		}
-		//delete(pm.processes, pid)
 	}
 	return nil
 }
 
 // only with mu lock
 func (pm *Manager) interruptFGroup(pid pgid) error {
-	fmt.Println("DEBUG SIGNAL: ", pm.processes[pid])
 	if data := pm.processes[pid]; data.Status == Foreground {
 
 		err := syscall.Kill(pid, syscall.SIGINT)
-		if pm.handleKillerror(err, pid) != nil {
-			return err
+		if pm.handleKillerror(err) != nil {
+			return fmt.Errorf("не удалось прервать процесс %d по причине: %w", pid, err)
 		}
-
-		fmt.Println("\nProcess", pid, "interrupted")
-		//delete(pm.processes, pid)
 	}
 	return nil
 }
 
 // only with mu lock
 func (pm *Manager) toBackgroundGroup(pid pgid) error {
-	signal.Ignore(syscall.SIGTTOU, syscall.SIGTTIN)
-	defer signal.Reset(syscall.SIGTTOU, syscall.SIGTTIN)
 	if data := pm.processes[pid]; data.Status == Foreground {
 		err := syscall.Kill(pid, syscall.SIGSTOP)
-		if pm.handleKillerror(err, pid) != nil {
-			return err
+		if pm.handleKillerror(err) != nil {
+			return fmt.Errorf("не удалось остановить процесс %d по причине: %w", pid, err)
 		}
 	}
 	return nil
@@ -89,16 +81,13 @@ func (pm *Manager) handleInterruptSignals() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGQUIT)
 	for sig := range c {
-		//fmt.Println("Получен сигнал:", sig)
 		if sig == syscall.SIGQUIT {
 			continue
 		}
 		pm.mu.Lock()
 		for pid := range pm.processes {
-			fmt.Println(pid)
 			err := pm.interruptFGroup(pid)
 			if err != nil {
-				fmt.Println("Не удалось прервать процесс", pid, "по причине:", err)
 				pm.errChan <- err
 			}
 		}
@@ -108,17 +97,12 @@ func (pm *Manager) handleInterruptSignals() {
 
 func (pm *Manager) handleStopSignals() {
 	c := make(chan os.Signal, 1)
-
 	signal.Notify(c, syscall.SIGTSTP)
-
 	for _ = range c {
-		//fmt.Println("Получен сигнал: ", sig)
 		pm.mu.Lock()
 		for pid := range pm.processes {
-			fmt.Println("переводим процесс", pid, "в фоновый режим")
 			err := pm.toBackgroundGroup(pid)
 			if err != nil {
-				fmt.Println("Не удалось перевести процесс", pid, "в фоновый режим по причине:", err)
 				pm.errChan <- err
 			}
 		}
@@ -130,7 +114,6 @@ func (pm *Manager) KillAll() {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	for pid := range pm.processes {
-		fmt.Println("kill:", pid)
 		_ = syscall.Kill(pid, syscall.SIGKILL)
 	}
 }
@@ -140,20 +123,17 @@ func (pm *Manager) Wait(pid int, data ProcessData) {
 	defer signal.Reset(syscall.SIGTTOU, syscall.SIGTTIN)
 	pm.mu.Lock()
 	pm.processes[pid] = &data
-	fmt.Println("DEBUG: ", pm.processes[pid], pid, data)
-	pm.mu.Unlock()
 	if data.Status == Background {
-		pm.mu.Lock()
 		pm.jobsCount++
 		pm.jobsID++
 		data.jobID = pm.jobsID
 		fmt.Printf("\n[%d] %d\n", data.jobID, pid)
-		pm.mu.Unlock()
 	}
+	pm.mu.Unlock()
 	if (data.Status == Foreground) && (!data.IsPipe) {
 		errno := pm.tcsetpgrp(pid)
 		if (errno != 0) && (errno.Error() != "no such process") {
-			pm.errChan <- errors.New("Ошибка передачи управления процессу: " + fmt.Sprint(errno))
+			pm.errChan <- fmt.Errorf("ошибка передачи управления процессу: %w", errno)
 			return
 		}
 	}
@@ -163,10 +143,10 @@ func (pm *Manager) Wait(pid int, data ProcessData) {
 	if (err != nil) && (err.Error() != "no child processes") {
 		fmt.Println("Ошибка ожидания процесса: ", err)
 	}
-	pgid1 := os.Getpid()
-	errno := pm.tcsetpgrp(pgid1)
+	shellPgid := os.Getpid()
+	errno := pm.tcsetpgrp(shellPgid)
 	if errno != 0 {
-		pm.errChan <- errors.New("Ошибка возврата управления процессу: " + fmt.Sprint(errno))
+		pm.errChan <- fmt.Errorf("ошибка возврата управления процессу: %w", errno)
 		return
 	}
 	if ws.Stopped() {
@@ -174,9 +154,7 @@ func (pm *Manager) Wait(pid int, data ProcessData) {
 			pm.stop(pid)
 		}
 	} else {
-		fmt.Println("DEBUG DATA: ", pm.processes[pid])
 		pm.delete(pid)
-		fmt.Println("DEBUG DATA: ", pm.processes[pid])
 	}
 }
 
@@ -201,9 +179,12 @@ func (pm *Manager) stop(pid pgid) {
 func (pm *Manager) delete(pid pgid) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
-	data := pm.processes[pid]
+	data, ok := pm.processes[pid]
+	if !ok {
+		return
+	}
 	if data.Status != Foreground {
-		fmt.Printf("[%d] Завершен %d\n", data.jobID, pid)
+		fmt.Printf("\n[%d] Завершен %d\n", data.jobID, pid)
 		pm.jobsCount--
 		if pm.jobsCount == 0 {
 			pm.jobsID = 0
@@ -264,7 +245,6 @@ func (pm *Manager) ToForeground(jobID int) error {
 				if err != nil {
 					return err
 				}
-				time.Sleep(1 * time.Second) // костыль
 				err = syscall.Kill(pid, syscall.SIGCONT)
 				if err != nil {
 					return err

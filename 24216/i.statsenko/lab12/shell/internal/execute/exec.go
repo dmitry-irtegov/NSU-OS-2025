@@ -10,13 +10,15 @@ import (
 	"syscall"
 )
 
-func (command *Command) Run(pm *process.Manager, pgid int) (int, error) {
+type Pgid = int
+
+func (command *Command) Run(pm *process.Manager, pidGroup Pgid) (Pgid, error) {
 	isShellCmd, err := command.shellCommands(pm)
 	if err != nil {
 		return 0, err
 	}
 	if isShellCmd {
-		return -1, nil
+		return 0, ErrShellCmd
 	}
 	stdin := os.Stdin
 	stdout := os.Stdout
@@ -61,14 +63,24 @@ func (command *Command) Run(pm *process.Manager, pgid int) (int, error) {
 	if command.OutPipe != nil {
 		stdout = command.OutPipe
 	}
-	var pid int
-	if pgid != 0 {
+	if stdin != os.Stdin {
+		defer func() {
+			_ = stdin.Close()
+		}()
+	}
+	if stdout != os.Stdout {
+		defer func() {
+			_ = stdout.Close()
+		}()
+	}
+	var pid Pgid
+	if pidGroup != 0 {
 		pid, err = syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
 			Dir:   "",
 			Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
 			Sys: &syscall.SysProcAttr{
 				Setpgid: true,
-				Pgid:    pgid,
+				Pgid:    pidGroup,
 			},
 		})
 	} else {
@@ -83,16 +95,10 @@ func (command *Command) Run(pm *process.Manager, pgid int) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if stdin != os.Stdin {
-		_ = stdin.Close()
-	}
-	if stdout != os.Stdout {
-		_ = stdout.Close()
-	}
 	return pid, nil
 }
 
-func (command *Command) Wait(pm *process.Manager, pid int) {
+func (command *Command) Wait(pm *process.Manager, pid Pgid) {
 	status := process.Foreground
 	if command.Bkgrnd {
 		status = process.Background
@@ -112,7 +118,7 @@ func (command *Command) Wait(pm *process.Manager, pid int) {
 
 func (command *Command) shellCommands(pm *process.Manager) (bool, error) {
 	switch command.Cmdargs[0] {
-	case "cd": // на кубунте че то не работает без самописного cd
+	case "cd":
 		if len(command.Cmdargs) != 2 {
 			return true, fmt.Errorf("cd: неверное количество аргументов")
 		}

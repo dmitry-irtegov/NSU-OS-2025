@@ -19,3 +19,4 @@ type Command struct {
 }
 
 var ErrExit = errors.New("exit")
+var ErrShellCmd = errors.New("is shell command")

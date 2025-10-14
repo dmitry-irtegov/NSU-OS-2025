@@ -27,9 +27,8 @@ func (parser *Parser) ParseLine() (execute.CmdRequest, error) {
 	var appendFlag bool
 	cmds := execute.CmdRequest{
 		Ncmds: 0,
-		Cmds:  make([]execute.Command, 0),
+		Cmds:  make([]execute.Command, 0, 4),
 	}
-
 	err := parser.promptline()
 	if err != nil {
 		return cmds, err
@@ -47,6 +46,9 @@ func (parser *Parser) ParseLine() (execute.CmdRequest, error) {
 			cmds.Cmds[cmds.Ncmds].Bkgrnd = true
 			fallthrough
 		case ';':
+			if cmds.Cmds[cmds.Ncmds].Cmdargs == nil {
+				return cmds, fmt.Errorf("%w: отсутствует команда перед ; или &", ErrSyntax)
+			}
 			parser.index++
 			cmds.Ncmds++
 			argCount = 0
@@ -59,23 +61,34 @@ func (parser *Parser) ParseLine() (execute.CmdRequest, error) {
 			parser.index++
 			parser.blankskip()
 			if parser.index >= parser.length {
-				return cmds, fmt.Errorf("syntax error")
+				return cmds, fmt.Errorf("%w: отсутствует выходной файл", ErrSyntax)
 			}
 			if appendFlag {
 				cmds.Cmds[cmds.Ncmds].Appfile = parser.strpbrk()
+				if cmds.Cmds[cmds.Ncmds].Appfile == "" {
+					return cmds, fmt.Errorf("%w: отсутствует выходной файл", ErrSyntax)
+				}
 			} else {
 				cmds.Cmds[cmds.Ncmds].Outfile = parser.strpbrk()
+				if cmds.Cmds[cmds.Ncmds].Outfile == "" {
+					return cmds, fmt.Errorf("%w: отсутствует выходной файл", ErrSyntax)
+				}
 			}
 			appendFlag = false
 		case '<':
 			parser.index++
 			parser.blankskip()
 			if parser.index >= parser.length {
-				fmt.Println("syntax error")
-				return cmds, fmt.Errorf("syntax error")
+				return cmds, fmt.Errorf("%w: отсутствует входной файл", ErrSyntax)
 			}
 			cmds.Cmds[cmds.Ncmds].Infile = parser.strpbrk()
+			if cmds.Cmds[cmds.Ncmds].Infile == "" {
+				return cmds, fmt.Errorf("%w: отсутствует входной файл", ErrSyntax)
+			}
 		case '|':
+			if cmds.Cmds[cmds.Ncmds].Cmdargs == nil {
+				return cmds, fmt.Errorf("%w: отсутствует команда перед конвеером", ErrSyntax)
+			}
 			cmds.Cmds[cmds.Ncmds].Pipe = true
 			parser.index++
 			cmds.Ncmds++
@@ -92,8 +105,7 @@ func (parser *Parser) ParseLine() (execute.CmdRequest, error) {
 		}
 	}
 	if cmds.Cmds[cmds.Ncmds].Pipe {
-		fmt.Println("syntax error")
-		return cmds, fmt.Errorf("syntax error")
+		return cmds, fmt.Errorf("%w: отсутствует последняя команда в конвеере", ErrSyntax)
 	}
 	cmds.Ncmds = returnValue
 	return cmds, nil

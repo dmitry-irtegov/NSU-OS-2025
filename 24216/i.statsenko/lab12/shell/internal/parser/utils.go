@@ -7,7 +7,7 @@ import (
 )
 
 func (parser *Parser) blankskip() {
-	for (parser.index < parser.length) && (unicode.IsSpace(parser.commandLine[parser.index])) { // кака
+	for (parser.index < parser.length) && (unicode.IsSpace(parser.commandLine[parser.index])) {
 		parser.index++
 	}
 }
