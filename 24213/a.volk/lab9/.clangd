@@ -1,5 +1,5 @@
 CompileFlags:
-        Add: [-xc++, -std=c++17, -Wall, -Wextra]
+        Add: [-xc++, -std=c++17, -Wall, -Wextra, -I/Users/sxrose/thirdparty/include, -I/home/students/24200/a.volk/thirdparty/include]
 
 ---
 If:

@@ -1,4 +1,4 @@
-#include "./thirdparty/include/expected.hpp"
+#include "expected.hpp"
 #include <cassert>
 #include <cerrno>
 #include <csignal>
