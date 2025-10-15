@@ -74,24 +74,17 @@ func (command *Command) Run(pm *process.Manager, pidGroup Pgid) (Pgid, error) {
 		}()
 	}
 	var pid Pgid
-	if pidGroup != 0 {
-		pid, err = syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
-			Dir:   "",
-			Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
-			Sys: &syscall.SysProcAttr{
-				Setpgid: true,
-				Pgid:    pidGroup,
-			},
-		})
-	} else {
-		pid, err = syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
-			Dir:   "",
-			Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
-			Sys: &syscall.SysProcAttr{
-				Setpgid: true,
-			},
-		})
+	attr := syscall.SysProcAttr{
+		Setpgid: true,
 	}
+	if pidGroup != 0 {
+		attr.Pgid = pidGroup
+	}
+	pid, err = syscall.ForkExec(binaryPath, command.Cmdargs, &syscall.ProcAttr{
+		Dir:   "",
+		Files: []uintptr{stdin.Fd(), stdout.Fd(), stderr.Fd()},
+		Sys:   &attr,
+	})
 	if err != nil {
 		return 0, err
 	}
