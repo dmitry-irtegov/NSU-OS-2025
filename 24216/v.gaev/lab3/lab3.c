@@ -7,13 +7,17 @@ void processing_file()
 {
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
-    *file = fopen("file", "r");
+    
+    FILE *file = fopen("file", "r");
     if (file == NULL) {
-        perror("Error opening file 2");
+        perror("Error opening file");
+        return;
     }
+
     if (fclose(file) != 0) {
-         perror("Error closing file");
+        perror("Error closing file");
     } 
+    
     printf("File closed successfully.\n");
 }
 
@@ -26,8 +30,7 @@ int main() {
     }
 
     printf("After setuid:\n");
-    get_id();
-    
     processing_file();
+    
     return 0;
 }
