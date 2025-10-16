@@ -1,35 +1,49 @@
 #include <stdio.h>
 #include <termios.h>
 #include <unistd.h>
+#include <stdlib.h>
 
-char get_without_enter(){
+int get_without_enter(char* result){
     struct termios old, new;
-    char ch;
 
-    tcgetattr(STDIN_FILENO, &old);
+    if (tcgetattr(STDIN_FILENO, &old) == -1) {
+        return -1;
+    }
 
     new = old;
     new.c_lflag &= ~ICANON;
     new.c_cc[VMIN] = 1;
     new.c_cc[VTIME] = 0;
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &new);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &new) == -1) {
+        return -1;
+    }
 
-    read(STDIN_FILENO, &ch, 1);
+    int read_result = read(STDIN_FILENO, result, 1);
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &old);
-    return ch;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &old) == -1) {
+        return -1;
+    }
+
+    return (read_result == 1) ? 0 : -1;
 }
 
 int main(){
+    char answer;
+
     printf("Хотите продолжить? (y/n) ");
     fflush(stdout);
 
-    char answer = get_without_enter();
-    if (answer == 'y' || answer == 'Y'){
-        printf("\nПродолжаем...");
-    } else {
-        printf("\nЗавершаем.");
+    if (get_without_enter(&answer) == -1) {
+        perror("Input failed");
+        exit(EXIT_FAILURE);
     }
+    
+    if (answer == 'y' || answer == 'Y'){
+        printf("\nПродолжаем...\n");
+    } else {
+        printf("\nЗавершаем.\n");
+    }
+
     return 0;
 }
