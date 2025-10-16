@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-void try_open(int file)
+void try_close(int file)
 {
     if (file == NULL) {
         perror("Error opening file");
@@ -25,7 +25,7 @@ int main() {
 
     get_id();
     FILE *file1 = fopen("file", "r");
-    try_open(file1);
+    try_close(file1);
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
         exit(1);
@@ -34,5 +34,5 @@ int main() {
     printf("After setuid:\n");
     get_id();
     FILE *file2 = fopen("file", "r");
-    try_open(file2);
+    try_close(file2);
 }
