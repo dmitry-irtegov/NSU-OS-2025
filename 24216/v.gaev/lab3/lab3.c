@@ -16,6 +16,7 @@ void processing_file()
 
     if (fclose(file) != 0) {
         perror("Error closing file");
+        return;
     } 
     
     printf("File closed successfully.\n");
