@@ -3,17 +3,15 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-void try_close(int file)
-{
-    if (file == NULL) {
-        perror("Error opening file");
-    }
-    else
-    {
-        fclose(file);
-        printf("File opened and closed successfully.\n");
-    }
 
+void try_close(FILE *file)
+{
+    if (fclose(file) != 0) {
+         perror("Error closing file");
+    } 
+    else {
+         printf("File closed successfully.\n");
+    }
 }
 
 void get_id()
@@ -25,7 +23,11 @@ void get_id()
 int main() {
     get_id();
     FILE *file1 = fopen("file", "r");
+    if (file1 == NULL) {
+        perror("Error opening file 1");
+    }
     try_close(file1);
+    
     if (setuid(getuid()) == -1) {
         perror("setuid failed");
         exit(1);
@@ -33,6 +35,12 @@ int main() {
 
     printf("After setuid:\n");
     get_id();
+    
     FILE *file2 = fopen("file", "r");
+    if (file2 == NULL) {
+        perror("Error opening file 2");
+    }
     try_close(file2);
+    
+    return 0;
 }
