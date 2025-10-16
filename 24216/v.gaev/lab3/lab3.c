@@ -21,8 +21,8 @@ void get_id()
     printf("Real UID: %d\n", getuid());
     printf("Effective UID: %d\n", geteuid());
 }
-int main() {
 
+int main() {
     get_id();
     FILE *file1 = fopen("file", "r");
     try_close(file1);
