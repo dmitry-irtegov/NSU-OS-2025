@@ -14,15 +14,18 @@ void print_user_ids() {
     printf("Effective UID: %d.\n", effective_uid);
 }
 
-int main() {
-    print_user_ids();
-
+void open_file(const char *filename) {
     FILE *file = fopen("test.txt", "r");
     if (file) {
         fclose(file);
     } else {
         perror("fopen failed");
     }
+}
+
+int main() {
+    print_user_ids();
+    open_file("test.txt");
 
     uid_t real_uid = getuid();
     if (setuid(real_uid) == -1) {
@@ -31,6 +34,7 @@ int main() {
     }
 
     print_user_ids();
+    open_file("test.txt");
 
     exit(0);
 }
