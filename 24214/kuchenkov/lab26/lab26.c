@@ -13,6 +13,5 @@ int main() {
 
     pclose(pipe_in);
     pclose(pipe_out);
-
     return 0;
 }
