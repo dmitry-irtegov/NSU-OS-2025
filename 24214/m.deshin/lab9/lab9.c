@@ -18,7 +18,7 @@ int main() {
                 perror("waitpid failed");
                 return 1;
             }
-            printf("\nPARENT PROCESS\n")
+            printf("\nPARENT PROCESS\n");
     }
 
     return 0;
