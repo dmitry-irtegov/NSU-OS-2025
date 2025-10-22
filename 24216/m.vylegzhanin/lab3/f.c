@@ -2,10 +2,14 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-void OpenFile(FILE *fp){
-    fp = fopen("file", "r+");
+void OpenFile(void) {
+    uid_t ruid = getuid();   // реальный UID
+    uid_t euid = geteuid();  // эффективный UID
+    printf("Real UID: %d, Effective UID: %d\n", ruid, euid);
+
+    FILE *fp = fopen("file", "r+");
     if (fp == NULL) {
-        perror("fopen crashed");
+        perror("fopen failed");
     } else {
         printf("File opened successfully.\n");
         fclose(fp);
@@ -13,25 +17,19 @@ void OpenFile(FILE *fp){
 }
 
 int main(void) {
-    FILE *fp;
-    uid_t ruid, euid;
+    uid_t ruid = getuid();
+    uid_t euid = geteuid();
 
-    ruid = getuid(); // реальный UID
-    euid = geteuid(); // эффективный UID
-    printf("Real UID: %d, Effective UID: %d\n", ruid, euid);
-
-    OpenFile(fp);
+    printf("Before setuid:\n");
+    OpenFile();
 
     if (setuid(ruid) == -1) {
-        perror("setuid is crashed");
+        perror("setuid failed");
         exit(EXIT_FAILURE);
     }
 
-    ruid = getuid(); // реальный UID
-    euid = geteuid(); // эффективный UID
-    printf("Real UID: %d, Effective UID: %d\n", ruid, euid);
-
-    OpenFile(fp);
+    printf("After setuid:\n");
+    OpenFile();
 
     return 0;
 }
