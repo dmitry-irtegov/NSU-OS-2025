@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <stdio.h>
 
-//для верификации 
+//verify 
 
 void twoSteps(){
     uid_t ruid = getuid(); //реальный
