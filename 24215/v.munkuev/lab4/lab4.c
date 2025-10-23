@@ -58,4 +58,6 @@ int main(){
 
         cur = next;
     }
+
+    return 0;
 }
