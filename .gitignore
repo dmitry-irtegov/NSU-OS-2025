@@ -59,5 +59,3 @@ core
 core.*
 .nfs*
 .DS_Store
-
-.gitignore
