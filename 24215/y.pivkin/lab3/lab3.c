@@ -6,7 +6,7 @@
 
 void twoSteps(){
     uid_t ruid = getuid(); //реальный
-    uid_t euid = getegid(); //эффективный
+    uid_t euid = geteuid(); //эффективный
 
     //1
     printf("Real User ID = %d\n", ruid);
