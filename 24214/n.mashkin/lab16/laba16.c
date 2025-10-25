@@ -16,7 +16,7 @@ int main() {
         exit(-1);
     }
     new = old;
-    new.c_lflag &= ~ICANON;
+    new.c_lflag &= ~(ICANON | ISIG);
     new.c_cc[VMIN] = 1;
     new.c_cc[VTIME] = 0;
     if (tcsetattr(STDIN_FILENO, TCSANOW, &new) == -1) {
