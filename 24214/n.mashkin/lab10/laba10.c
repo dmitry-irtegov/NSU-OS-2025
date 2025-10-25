@@ -16,11 +16,17 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
     if (pid == 0) {
-        execvp(argv[1], argv + 1);
-        perror("Could not execute the command");
+        if (execvp(argv[1], argv + 1) == -1) {
+            perror("Could not execute the command");
+            exit(-1);
+        }
     } else {
         int status;
         wait(&status);
+        if (!WIFEXITED(status)) {
+            perror("Process terminated abnormally");
+            exit(-1);
+        }
         printf("Execution %s with exit status %d\n",
                 WEXITSTATUS(status) ? "failed" : "completed", WEXITSTATUS(status));
     }
