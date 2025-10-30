@@ -3,7 +3,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define NAMEFILE "file.txt"
 
 int main(void)
 {
@@ -14,7 +13,7 @@ int main(void)
         perror("Ошибка при создании процесса");
         exit(EXIT_FAILURE);
     case 0:
-        execlp("cat", "cat", NAMEFILE, NULL);
+        execlp("cat", "cat", "file.txt", NULL);
         perror("Не удалось выполнить cat");
         exit(EXIT_FAILURE);
     default:
@@ -25,5 +24,5 @@ int main(void)
         printf("\nРодительский процесс\n");
         break;
     }
-    return 0;
+    exit(EXIT_SUCCESS);
 }
