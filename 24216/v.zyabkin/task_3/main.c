@@ -18,9 +18,9 @@ void open_file(const char *filename) {
     FILE *file = fopen("test.txt", "r");
     if (file) {
         fclose(file);
-    } else {
-        perror("fopen failed");
+        return;
     }
+    perror("fopen failed");
 }
 
 int main() {
