@@ -22,7 +22,10 @@ int main(int argc, char *argv[]) {
         }
     } else {
         int status;
-        wait(&status);
+        if (wait(&status) == -1) {
+            perror("Could not wait");
+            exit(-1);
+        }
         if (!WIFEXITED(status)) {
             perror("Process terminated abnormally");
             exit(-1);
