@@ -19,7 +19,7 @@ int main(){
         execlp("cat", "cat", "TwoColors.txt", NULL); // +PATH 
         
         perror("execlp"); // <- в нормальном случае мы не должны доходить до этой части кода
-        exit(1);
+        exit(2);
     } else { //родитель
         printf("Parent process started.\n");
         waitpid(pid, NULL, 0); //Ожидание завершения потомка
