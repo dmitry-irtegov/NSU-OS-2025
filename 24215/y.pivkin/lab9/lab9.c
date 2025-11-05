@@ -11,10 +11,10 @@ int main(){
         Процесс-потомок получает в качестве кода возврата значение 0, если вызов fork() оказался успешным.
     */
 
-    if (pid < 0) //ошибка
+    if (pid < 0) { //ошибка
         perror("fork");
         exit(1);
-    else if (pid == 0) { //потомок
+    } else if (pid == 0) { //потомок
         printf("Child process started.\n");
         execlp("cat", "cat", "TwoColors.txt", NULL); // +PATH 
         
