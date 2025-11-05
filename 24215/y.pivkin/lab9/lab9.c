@@ -13,10 +13,13 @@ int main(){
 
     if (pid < 0) //ошибка
         perror("fork");
+        exit(1);
     else if (pid == 0) { //потомок
         printf("Child process started.\n");
-        execl("/bin/cat", "cat", "TwoColors.txt", NULL);
-        //printf("Child process closing...\n"); - не выведется
+        execlp("cat", "cat", "TwoColors.txt", NULL); // +PATH 
+        
+        perror("execlp"); // <- в нормальном случае мы не должны доходить до этой части кода
+        exit(1);
     } else { //родитель
         printf("Parent process started.\n");
         waitpid(pid, NULL, 0); //Ожидание завершения потомка
