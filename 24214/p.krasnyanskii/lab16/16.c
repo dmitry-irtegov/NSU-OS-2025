@@ -17,9 +17,10 @@ char reply(){
     return c;
 }
 
-void main(){
+int main(void){
     printf("Select any symbol: ");
     char c = reply();
     printf("\nYou've selected: %c\n", c);
+    return 0;
 }
 
