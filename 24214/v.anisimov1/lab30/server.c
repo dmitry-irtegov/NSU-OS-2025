@@ -46,8 +46,8 @@ int main () {
         return 0;
     }
 
-    int clientFD = accept(serverFD, NULL, NULL); 
-    if (clientFD == -1) {
+    int connectFD = accept(serverFD, NULL, NULL); 
+    if (connectFD == -1) {
         perror("SERVER: accepting error\n");
         close(serverFD); 
         return 0; 
@@ -57,7 +57,7 @@ int main () {
     ssize_t recvCode; 
 
     while (1) {
-        recvCode = recv(clientFD, buffer, BUFFSIZE, 0); 
+        recvCode = recv(connectFD, buffer, BUFFSIZE, 0); 
 
         if (recvCode <= 0) 
             break; 
@@ -71,7 +71,11 @@ int main () {
     if (recvCode == -1)
         perror("SERVER: recv error\n"); 
     
-    close(clientFD); 
+    close(connectFD); 
     close(serverFD); 
+
+    if (unlink(SOCKETNAME) == -1) // deleting socket-file  
+        perror("SERVER: unlinking error\n");
+
     return 0; 
 }
