@@ -16,7 +16,7 @@ typedef struct sockaddr_un sockadd;
 int initSocketAddress(sockadd *addr, const char *path) {
     addr->sun_family = AF_UNIX; 
     char *res = strcpy(addr->sun_path, path); 
-    int addrLen = (int) (offsetof(sockadd, sun_path) + strlen(SOCKETNAME) + 1); // calculate addr lenght
+    int addrLen = (int) (offsetof(sockadd, sun_path) + strlen(SOCKETNAME)); // calculate addr lenght
     return addrLen;
 }
 

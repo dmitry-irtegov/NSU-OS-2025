@@ -17,7 +17,7 @@ typedef struct sockaddr_un sockadd;
 int initSocketAddress(sockadd *addr, const char *path) {
     addr->sun_family = AF_UNIX; 
     char *res = strcpy(addr->sun_path, path); 
-    int addrLen = (int) (offsetof(sockadd, sun_path) + strlen(SOCKETNAME) + 1); // calculate addr lenght
+    int addrLen = (int) (offsetof(sockadd, sun_path) + strlen(SOCKETNAME)); // calculate addr lenght
     return addrLen;
 }
 
@@ -54,14 +54,18 @@ int main () {
     }
 
     char buffer[BUFFSIZE]; 
-    ssize_t recvCode = recv(clientFD, buffer, BUFFSIZE, 0); 
+    ssize_t recvCode; 
 
-    while (recvCode > 0) {
+    while (1) {
+        recvCode = recv(clientFD, buffer, BUFFSIZE, 0); 
+
+        if (recvCode <= 0) 
+            break; 
+
         printf("String from the client: %s", buffer); 
         for (char *s = buffer; *(s) != '\0'; ++s)
             *(s) = (char) toupper((char) *(s));
-        printf(" | Processed string: %s\n", buffer);
-        recvCode = recv(clientFD, buffer, BUFFSIZE, 0); 
+        printf(" | Processed string: %s\n", buffer); 
     }
 
     if (recvCode == -1)
