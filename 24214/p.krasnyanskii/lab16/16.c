@@ -22,3 +22,4 @@ void main(){
     char c = reply();
     printf("\nYou've selected: %c\n", c);
 }
+
