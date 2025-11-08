@@ -1,5 +1,12 @@
 CC = gcc
-CFLAGS = -g -Wall
+
+CFLAGS = -g -Wall -I$(INCDIR)
+LDFLAGS =
+LIBS =
+
+RM = rm -f
+RMDIR = rm -rf
+MKDIR_P = mkdir -p
 
 SRCDIR = src
 INCDIR = src/includes
@@ -8,21 +15,26 @@ BINDIR = bin
 
 TARGET = $(BINDIR)/shell
 
-SOURCES = $(wildcard $(SRCDIR)/*.c)
+SOURCES = \
+    $(SRCDIR)/shell.c \
+    $(SRCDIR)/builtin.c \
+	$(SRCDIR)/jobs.c \
+	$(SRCDIR)/execute.c \
+    $(SRCDIR)/parseline.c
 
-OBJECTS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
+OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+
+.PHONY: all clean
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	@mkdir -p $(BINDIR)
-	$(CC) $(CFLAGS) -I$(INCDIR) -o $@ $^
+	@$(MKDIR_P) $(BINDIR)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
-	@mkdir -p $(OBJDIR)
-	$(CC) $(CFLAGS) -I$(INCDIR) -c $< -o $@
+	@$(MKDIR_P) $(OBJDIR)
+	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR)
-
-.PHONY: all clean
+	@$(RMDIR) $(OBJDIR) $(BINDIR)
