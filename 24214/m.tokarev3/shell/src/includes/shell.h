@@ -80,6 +80,7 @@ void bg_handler();
 // builtin.c
 int is_builtin(char *arg);
 void execute_builtin();
+void cd_handler();
 
 // signal handlers
 void sigint_handler(int sig);

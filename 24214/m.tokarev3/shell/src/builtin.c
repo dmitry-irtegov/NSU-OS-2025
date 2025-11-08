@@ -8,7 +8,8 @@ int is_builtin(char *arg)
     if (strcmp(arg, "exit") == 0 ||
         strcmp(arg, "fg") == 0 ||
         strcmp(arg, "bg") == 0 ||
-        strcmp(arg, "jobs") == 0)
+        strcmp(arg, "jobs") == 0 ||
+        strcmp(arg, "cd") == 0)
     {
         return 1;
     }
@@ -36,5 +37,30 @@ void execute_builtin()
     else if (strcmp(cmd, "jobs") == 0)
     {
         print_jobs();
+    }
+    else if (strcmp(cmd, "cd") == 0)
+    {
+        cd_handler();
+    }
+}
+
+void cd_handler()
+{
+    char *dir = cmds[0].cmdargs[1];
+
+    if (dir == NULL)
+    {
+        dir = getenv("HOME");
+        if (dir == NULL)
+        {
+            fprintf(stderr, "cd: HOME environment variable not set\n");
+            return;
+        }
+    }
+
+    // Попытка смены директории
+    if (chdir(dir) != 0)
+    {
+        perror("cd");
     }
 }
