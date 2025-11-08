@@ -1,5 +1,8 @@
 #pragma once
 
+#define _POSIX_C_SOURCE 200112L
+#define _DEFAULT_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +63,7 @@ void execute_pipeline();
 void initialize_jobs();
 
 void handle_sigtstp(int sig);
+void handle_sigint(int sig);
 void handle_sigchld(int sig);
 
 void add_job(pid_t pid, char *command);

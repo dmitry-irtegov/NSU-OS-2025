@@ -152,6 +152,30 @@ void handle_sigtstp(int sig)
     }
 }
 
+void handle_sigint(int sig)
+{
+    if (foreground_pid > 0)
+    {
+        if (kill(foreground_pid, SIGINT) == 0)
+        {
+            printf("\n");
+        }
+        else
+        {
+            perror("kill");
+            printf("\n");
+            print_prompt(DEFAULT_SHELL_NAME);
+            fflush(stdout);
+        }
+    }
+    else
+    {
+        printf("\n");
+        print_prompt(DEFAULT_SHELL_NAME);
+        fflush(stdout);
+    }
+}
+
 void handle_sigchld(int sig)
 {
     check_jobs();

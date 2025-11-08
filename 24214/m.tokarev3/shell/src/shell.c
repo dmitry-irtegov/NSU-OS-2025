@@ -13,28 +13,38 @@ void print_prompt(char *name)
     fflush(stdout);
 }
 
-void sigint_handler(int sig)
-{
-    printf("\n");
-    print_prompt(DEFAULT_SHELL_NAME);
-    fflush(stdout);
-}
-
 void sigquit_handler(int sig)
 {
-    printf("\n");
-    print_prompt(DEFAULT_SHELL_NAME);
-    fflush(stdout);
 }
 
 int main(int argc, char **argv)
 {
     char line[MAX_LINE];
+    struct sigaction sa;
 
-    signal(SIGINT, sigint_handler);
-    signal(SIGQUIT, sigquit_handler);
-    signal(SIGTSTP, handle_sigtstp);
-    signal(SIGCHLD, handle_sigchld);
+    // Настройка обработчика SIGINT (Ctrl+C)
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGINT, &sa, NULL);
+
+    // Настройка обработчика SIGQUIT (Ctrl+\)
+    sa.sa_handler = sigquit_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGQUIT, &sa, NULL);
+
+    // Настройка обработчика SIGTSTP (Ctrl+Z)
+    sa.sa_handler = handle_sigtstp;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGTSTP, &sa, NULL);
+
+    // Настройка обработчика SIGCHLD
+    sa.sa_handler = handle_sigchld;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGCHLD, &sa, NULL);
 
     initialize_jobs();
 

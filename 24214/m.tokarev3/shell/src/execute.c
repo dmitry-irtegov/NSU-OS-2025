@@ -64,7 +64,7 @@ void execute_commands()
 
             set_foreground_pid(0);
 
-            signal(SIGINT, sigint_handler);
+            signal(SIGINT, handle_sigint);
             signal(SIGQUIT, sigquit_handler);
             signal(SIGTSTP, handle_sigtstp);
         }
