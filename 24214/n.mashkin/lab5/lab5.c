@@ -19,7 +19,7 @@ int main() {
     }
 
     char buf[4096];
-    int has_read, table_ind = 1, cnt = 1;
+    int has_read, table_ind = 1;
     off_t read_count = 0;
     table[0] = 0;
     while ((has_read = read(fd, buf, 4096)) > 0) {
