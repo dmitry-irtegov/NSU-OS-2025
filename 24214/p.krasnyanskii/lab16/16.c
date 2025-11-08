@@ -25,7 +25,7 @@ char reply(){
         exit(EXIT_FAILURE);
     }
 
-    read(0, &c, 1);
+    ssize_t r = read(STDIN_FILENO, &c, 1);
     if (r < 0) {
         perror("read");
         tcsetattr(STDIN_FILENO, TCSANOW, &savetty);
@@ -47,7 +47,7 @@ int main(void){
     }
 
     char c = reply();
-    
+
     if (printf("\nYou've selected: %c\n", c) < 0) {
         perror("printf");
         exit(EXIT_FAILURE);
