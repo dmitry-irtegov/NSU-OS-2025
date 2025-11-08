@@ -67,7 +67,7 @@ int main() {
         exit(-1);
     }
     while (answer) {
-        if (answer < 0 || answer >= table_ind) {
+        if (answer < 0 || answer > table_ind) {
             printf("Please, enter a valid line number: ");
             if (scanf("%d", &answer) != 1) {
                 fprintf(stderr, "Could not read a line number");
