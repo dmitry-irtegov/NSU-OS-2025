@@ -56,10 +56,18 @@ int main(int argc, char **argv)
 
         if (fgets(line, MAX_LINE, stdin) == NULL)
         {
-            printf("\n");
-            cleanup_jobs();
-            printf("Goodbye!\n");
-            break;
+            if (feof(stdin))
+            {
+                printf("\n");
+                cleanup_jobs();
+                printf("Goodbye!\n");
+                break;
+            }
+            else if (ferror(stdin))
+            {
+                clearerr(stdin);
+                continue;
+            }
         }
 
         num_cmds = parseline(line);
