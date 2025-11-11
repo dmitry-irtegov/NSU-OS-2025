@@ -29,6 +29,8 @@ int main () {
         return 0;
     } 
 
+    unlink(SOCKETNAME);
+
     sockadd address; // creating address structure 
     int addrLen = initSocketAddress(&address, SOCKETNAME); // get address length
 
@@ -73,9 +75,6 @@ int main () {
     
     close(connectFD); 
     close(serverFD); 
-
-    if (unlink(SOCKETNAME) == -1) // deleting socket-file  
-        perror("SERVER: unlinking error\n");
 
     return 0; 
 }
