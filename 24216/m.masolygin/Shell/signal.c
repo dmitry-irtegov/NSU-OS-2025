@@ -4,9 +4,13 @@
 
 #include "shell.h"
 
-#define NUM_SIGNALS 3
+#define NUM_SIGNALS 5
 
-static int signals_to_handle[] = {SIGINT, SIGQUIT, SIGTSTP};
+static int signals_to_handle[] = {SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU};
+
+void signal_handler(int signum) {
+    // Ignore signals in the shell
+}
 
 void ignore_signals() {
     for (int i = 0; i < NUM_SIGNALS; i++) {

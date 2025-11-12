@@ -6,26 +6,39 @@
 
 #include "shell.h"
 
-// 13-14
-void handler_child(int pid) {
+void handler_child(int pid, char* cmdline) {
     int status;
 
-    if (waitpid(pid, &status, 0) == -1) {
+    if (waitpid(pid, &status, WUNTRACED) == -1) {
         perror("waitpid");
         return;
     }
 
-#ifdef DEBUG
-    printf("Debug: handler_child called for PID %d\n", pid);
-
     if (WIFEXITED(status)) {
+        delete_job(pid);
+#ifdef DEBUG
         printf("Process %d exited with status %d\n", pid, WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        printf("Process %d killed by signal %d\n", pid, WTERMSIG(status));
-    } else if (WIFSTOPPED(status)) {
-        printf("Process %d stopped by signal %d\n", pid, WSTOPSIG(status));
-    }
 #endif
+    } else if (WIFSIGNALED(status)) {
+        delete_job(pid);
+#ifdef DEBUG
+        printf("Process %d killed by signal %d\n", pid, WTERMSIG(status));
+#endif
+    } else if (WIFSTOPPED(status)) {
+        struct job* jb = get_job_by_pid(pid);
+        if (jb == NULL) {
+            add_job(pid, pid, STOPPED, cmdline);
+        } else {
+            jb->state = STOPPED;
+        }
+        jb = get_job_by_pid(pid);
+        if (jb != NULL) {
+            fprintf(stderr, "\n[%d]+ Stopped\n", jb->jid);
+        }
+#ifdef DEBUG
+        printf("Process %d stopped by signal %d\n", pid, WSTOPSIG(status));
+#endif
+    }
 }
 
 // 15
@@ -67,6 +80,14 @@ void cleanup_zombies() {
     int status;
 
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+        struct job* jb = get_job_by_pid(pid);
+        if (jb != NULL) {
+            if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                fprintf(stderr, "[%d]   Done            %s\n", jb->jid,
+                        jb->cmdline);
+                delete_job(pid);
+            }
+        }
 #ifdef DEBUG
         printf("Background process PID: %d finished\n", pid);
 #endif
