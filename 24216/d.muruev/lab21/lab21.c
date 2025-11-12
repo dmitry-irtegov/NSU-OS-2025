@@ -4,6 +4,7 @@
 #include <unistd.h> 
 
 #define SIGINT_ERR "Ошибка установки обработчика SIGINT"
+#define SIGQUIT_ERR "Ошибка установки обработчика SIGQUIT"
 
 volatile sig_atomic_t beep_count = 0;
 volatile sig_atomic_t quit_flag = 0;
@@ -14,7 +15,7 @@ void handle_sigint(int sig) {
     
     write(STDOUT_FILENO, "\a", 1);
 
-    if (signal(SIGINT, handle_sigint) == SIG_ERR) {
+    if (signal(sig, handle_sigint) == SIG_ERR) {
         write(STDERR_FILENO, SIGINT_ERR, sizeof(SIGINT_ERR));
         exit(EXIT_FAILURE);
     }
@@ -23,6 +24,11 @@ void handle_sigint(int sig) {
 
 void handle_sigquit(int sig) {
     quit_flag = 1;
+
+    if (signal(sig, handle_sigquit) == SIG_ERR) {
+        write(STDERR_FILENO, SIGQUIT_ERR, sizeof(SIGQUIT_ERR));
+        exit(EXIT_FAILURE);
+    }
 }
 
 int main() {
@@ -33,20 +39,13 @@ int main() {
     }
 
     if (signal(SIGQUIT, handle_sigquit) == SIG_ERR) {
-        perror("Ошибка установки обработчика SIGQUIT");
+        perror(SIGQUIT_ERR);
         exit(EXIT_FAILURE);
     }
-
-    printf("Нажмите Ctrl+C для звукового сигнала.\n");
-    printf("Нажмите Ctrl+\\ для выхода.\n");
-
 
     while (quit_flag == 0) {
         pause();
     }
-
-    
-    printf("\nПолучен сигнал SIGQUIT. Завершение.\n");
 
     printf("Всего прозвучало сигналов: %d\n", (int)beep_count);
 
