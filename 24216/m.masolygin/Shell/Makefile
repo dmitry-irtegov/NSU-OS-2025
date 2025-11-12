@@ -2,7 +2,7 @@
 
 CC = gcc
 CFLAGS = -Wall -g
-SRCS = parseline.c promptline.c shell.c utils.c
+SRCS = parseline.c promptline.c shell.c utils.c signal.c
 OBJS = $(SRCS:.c=.o)
 TARGET = shell
 
