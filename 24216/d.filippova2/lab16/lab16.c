@@ -14,6 +14,8 @@ int main(void) {
     newt = oldt;
 
     newt.c_lflag &= ~(ICANON | ECHO);
+    newt.c_cc[VMIN] = 1;
+    newt.c_cc[VTIME] = 0;
 
     if (tcsetattr(STDIN_FILENO, TCSANOW, &newt) == -1) {
         perror("tcsetattr");
