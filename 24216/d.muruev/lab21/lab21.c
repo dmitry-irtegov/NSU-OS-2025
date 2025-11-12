@@ -47,7 +47,7 @@ int main() {
         pause();
     }
 
-    printf("Всего прозвучало сигналов: %d\n", (int)beep_count);
+    printf("\nВсего прозвучало сигналов: %d\n", (int)beep_count);
 
     return 0;
 }
