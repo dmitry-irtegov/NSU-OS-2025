@@ -3,6 +3,7 @@
 #include <signal.h> 
 #include <unistd.h> 
 
+#define SIGINT_ERR "Ошибка установки обработчика SIGINT"
 
 volatile sig_atomic_t beep_count = 0;
 volatile sig_atomic_t quit_flag = 0;
@@ -11,12 +12,11 @@ volatile sig_atomic_t quit_flag = 0;
 void handle_sigint(int sig) {
     beep_count++;
     
-
     write(STDOUT_FILENO, "\a", 1);
-    
 
     if (signal(SIGINT, handle_sigint) == SIG_ERR) {
-
+        write(STDERR_FILENO, SIGINT_ERR, sizeof(SIGINT_ERR));
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -28,7 +28,7 @@ void handle_sigquit(int sig) {
 int main() {
 
     if (signal(SIGINT, handle_sigint) == SIG_ERR) {
-        perror("Ошибка установки обработчика SIGINT");
+        perror(SIGINT_ERR);
         exit(EXIT_FAILURE);
     }
 
@@ -37,9 +37,8 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    printf("Программа запущена.\n");
-    printf("Нажмите Ctrl+C для звукового сигнала (SIGINT).\n");
-    printf("Нажмите Ctrl+\\ для выхода и подсчета (SIGQUIT).\n");
+    printf("Нажмите Ctrl+C для звукового сигнала.\n");
+    printf("Нажмите Ctrl+\\ для выхода.\n");
 
 
     while (quit_flag == 0) {
