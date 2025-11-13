@@ -6,38 +6,45 @@
 
 #include "shell.h"
 
-void handler_child(int pid, char* cmdline) {
+void handler_child(pid_t pgid, int ncmds, char* cmdline) {
     int status;
 
-    if (waitpid(pid, &status, WUNTRACED) == -1) {
-        perror("waitpid");
-        return;
-    }
+    for (int i = 0; i < ncmds; i++) {
+        pid_t wpid = waitpid(-pgid, &status, WUNTRACED);
 
-    if (WIFEXITED(status)) {
-        delete_job(pid);
-#ifdef DEBUG
-        printf("Process %d exited with status %d\n", pid, WEXITSTATUS(status));
-#endif
-    } else if (WIFSIGNALED(status)) {
-        delete_job(pid);
-#ifdef DEBUG
-        printf("Process %d killed by signal %d\n", pid, WTERMSIG(status));
-#endif
-    } else if (WIFSTOPPED(status)) {
-        struct job* jb = get_job_by_pid(pid);
-        if (jb == NULL) {
-            add_job(pid, pid, STOPPED, cmdline);
-        } else {
-            jb->state = STOPPED;
+        if (wpid == -1) {
+            perror("waitpid");
+            continue;
         }
-        jb = get_job_by_pid(pid);
-        if (jb != NULL) {
-            fprintf(stderr, "\n[%d]+ Stopped\n", jb->jid);
-        }
+
+        if (WIFEXITED(status)) {
+            delete_job(wpid);
 #ifdef DEBUG
-        printf("Process %d stopped by signal %d\n", pid, WSTOPSIG(status));
+            printf("Process %d exited with status %d\n", wpid,
+                   WEXITSTATUS(status));
 #endif
+        } else if (WIFSIGNALED(status)) {
+            delete_job(wpid);
+#ifdef DEBUG
+            printf("Process %d killed by signal %d\n", wpid, WTERMSIG(status));
+#endif
+        } else if (WIFSTOPPED(status)) {
+            struct job* jb = get_job_by_pid(wpid);
+            if (jb == NULL) {
+                add_job(wpid, pgid, STOPPED, cmdline);
+            } else {
+                jb->state = STOPPED;
+                jb->pgid = pgid;
+            }
+            jb = get_job_by_pid(wpid);
+            if (jb != NULL) {
+                fprintf(stderr, "\n[%d]+ Stopped %d\n", jb->jid, jb->pid);
+            }
+#ifdef DEBUG
+            printf("Process %d stopped by signal %d\n", wpid, WSTOPSIG(status));
+#endif
+            break;
+        }
     }
 }
 
@@ -83,7 +90,7 @@ void cleanup_zombies() {
         struct job* jb = get_job_by_pid(pid);
         if (jb != NULL) {
             if (WIFEXITED(status) || WIFSIGNALED(status)) {
-                fprintf(stderr, "[%d]   Done            %s\n", jb->jid,
+                fprintf(stderr, "[%d] Done %d  %s\n", jb->jid, jb->pid,
                         jb->cmdline);
                 delete_job(pid);
             }

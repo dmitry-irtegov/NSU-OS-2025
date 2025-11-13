@@ -38,9 +38,9 @@ int parseline(char*);
 int promptline(char*, char*, int);
 
 /* utils.c */
-void handler_child(int, char*);
+void handler_child(pid_t pgid, int ncmds, char* cmdline);
 void file_operation(char*, int);
-void cleanup_zombies(void);
+void cleanup_zombies();
 
 /* signal.c */
 void ignore_signals();
@@ -53,3 +53,10 @@ int delete_job(pid_t pid);
 struct job* get_job_by_pid(pid_t pid);
 struct job* get_job_by_jid(int jid);
 void list_jobs(void);
+
+/* pipes.c */
+void create_pipes(int pipes[][2], int ncmds);
+void setup_pipe_input(int pipes[][2], int cmd_index);
+void setup_pipe_output(int pipes[][2], int cmd_index, int ncmds);
+void close_all_pipes(int pipes[][2], int ncmds);
+void close_unused_pipes(int pipes[][2], int cmd_index, int ncmds);

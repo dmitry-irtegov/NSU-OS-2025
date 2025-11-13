@@ -8,10 +8,6 @@
 
 static int signals_to_handle[] = {SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU};
 
-void signal_handler(int signum) {
-    // Ignore signals in the shell
-}
-
 void ignore_signals() {
     for (int i = 0; i < NUM_SIGNALS; i++) {
         if (signal(signals_to_handle[i], SIG_IGN) == SIG_ERR) {

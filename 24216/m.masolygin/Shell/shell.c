@@ -19,6 +19,9 @@ int main(int argc, char* argv[]) {
     char prompt[50]; /* shell prompt */
     pid_t child_pid = -1;
 
+    // TODO: move pipes declaration
+    int pipes[MAXCMDS][2];
+
     /* PLACE SIGNAL CODE HERE */
     ignore_signals();
 
@@ -27,7 +30,7 @@ int main(int argc, char* argv[]) {
         perror("setpgid");
         exit(1);
     }
-
+    // TODO: function issaty
     if (isatty(STDIN_FILENO)) {
         if (tcsetpgrp(STDIN_FILENO, shell_pgid) < 0) {
             perror("tcsetpgrp");
@@ -43,6 +46,7 @@ int main(int argc, char* argv[]) {
 
         cleanup_zombies();
 
+        // TODO: change orginal_line usage
         char original_line[MAXLINE];
         strncpy(original_line, line, MAXLINE - 1);
         original_line[MAXLINE - 1] = '\0';
@@ -59,6 +63,8 @@ int main(int argc, char* argv[]) {
             }
         }
 #endif
+
+        // TODO: create built-in commands file
 
         // Exit shell
         if (strcmp(cmds[0].cmdargs[0], "exit") == 0) {
@@ -107,7 +113,7 @@ int main(int argc, char* argv[]) {
             if (isatty(STDIN_FILENO)) {
                 tcsetpgrp(STDIN_FILENO, jb->pgid);
             }
-            handler_child(jb->pid, jb->cmdline);
+            handler_child(jb->pid, 1, jb->cmdline);
             if (isatty(STDIN_FILENO)) {
                 tcsetpgrp(STDIN_FILENO, shell_pgid);
             }
@@ -154,6 +160,9 @@ int main(int argc, char* argv[]) {
         }
 
         // 13-14
+        pid_t pgid = 0;
+
+        create_pipes(pipes, ncmds);
         for (i = 0; i < ncmds; i++) {
             child_pid = fork();
             switch (child_pid) {
@@ -161,13 +170,22 @@ int main(int argc, char* argv[]) {
                     perror("Error fork");
                     exit(1);
                 case 0:
-                    setpgid(0, 0);
+                    if (i == 0) {
+                        setpgid(0, 0);
+                    } else {
+                        setpgid(0, pgid);
+                    }
 
                     if (bkgrnd) {
                         ignore_signals();
                     } else {
                         activate_signals();
                     }
+
+                    setup_pipe_input(pipes, i);
+                    setup_pipe_output(pipes, i, ncmds);
+
+                    close_all_pipes(pipes, ncmds);
 
                     if (infile && i == 0) {
                         file_operation(infile, 0);
@@ -183,27 +201,34 @@ int main(int argc, char* argv[]) {
                     perror("Error execvp");
                     exit(1);
                 default:
-                    setpgid(child_pid, child_pid);
-
-                    if (bkgrnd) {
-                        int jid = add_job(child_pid, child_pid, RUNNING,
-                                          original_line);
-                        fprintf(stderr, "[%d] %d\n", jid, child_pid);
+                    if (i == 0) {
+                        setpgid(child_pid, child_pid);
+                        pgid = child_pid;
                     } else {
-                        if (isatty(STDIN_FILENO)) {
-                            tcsetpgrp(STDIN_FILENO, child_pid);
-                        }
-                        handler_child(child_pid, original_line);
-                        if (isatty(STDIN_FILENO)) {
-                            tcsetpgrp(STDIN_FILENO, shell_pgid);
-                        }
+                        setpgid(child_pid, pgid);
                     }
+
                     break;
             }
 
             /*  FORK AND EXECUTE  */
         }
+        close_all_pipes(pipes, ncmds);
 
+        if (bkgrnd) {
+            int jid = add_job(pgid, pgid, RUNNING, original_line);
+            fprintf(stderr, "[%d] %d\n", jid, pgid);
+        } else {
+            if (isatty(STDIN_FILENO)) {
+                tcsetpgrp(STDIN_FILENO, pgid);
+            }
+
+            handler_child(pgid, ncmds, original_line);
+
+            if (isatty(STDIN_FILENO)) {
+                tcsetpgrp(STDIN_FILENO, shell_pgid);
+            }
+        }
     } /* close while */
 
     return 0;
