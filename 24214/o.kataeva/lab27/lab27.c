@@ -27,7 +27,7 @@ int main(int argc, char** argv){
     }
 
     while (getline(&str, &len, file) != -1) {
-        if (str[0] == '\n' || str[0] == '\r') {
+        if (str[0] == '\n') {
             fputs("\n", output);
         }
     }
