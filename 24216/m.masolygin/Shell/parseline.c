@@ -80,10 +80,41 @@ int parseline(char* line) {
                 /*  a command argument  */
                 if (nargs == 0) /* next command */
                     rval = ncmds + 1;
-                cmds[ncmds].cmdargs[nargs++] = s;
+
+                /* Save start of argument */
+                char* arg_start = s;
+
+                /* Process argument which may have multiple quoted/unquoted
+                 * parts */
+                while (*s && !strchr(delim, *s)) {
+                    if (*s == '"' || *s == '\'') {
+                        char quote = *s;
+                        /* Remove opening quote by shifting */
+                        char* src = s + 1;
+                        char* dst = s;
+                        while (*src && *src != quote) {
+                            *dst++ = *src++;
+                        }
+                        if (*src == quote) {
+                            /* Skip closing quote */
+                            src++;
+                        }
+                        /* Continue shifting rest of string */
+                        while (*src) {
+                            *dst++ = *src++;
+                        }
+                        *dst = '\0';
+                        /* s stays at same position to process next part */
+                    } else {
+                        s++;
+                    }
+                }
+
+                cmds[ncmds].cmdargs[nargs++] = arg_start;
                 cmds[ncmds].cmdargs[nargs] = (char*)NULL;
-                s = strpbrk(s, delim);
-                if (isspace(*s)) *s++ = '\0';
+
+                if (*s && isspace(*s)) *s++ = '\0';
+
                 break;
         } /*  close switch  */
     } /* close while  */
