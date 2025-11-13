@@ -14,10 +14,7 @@ void print_and_open(const char *filename) {
         perror("fopen failed");
     } else {
         fclose(file);
-        printf("File '%s' opened successfully.\n", filename);
     }
-
-    printf("\n");
 }
 
 
@@ -34,3 +31,4 @@ int main() {
 
     return 0;
 }
+
