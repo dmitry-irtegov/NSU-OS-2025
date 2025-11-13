@@ -100,3 +100,12 @@ void cleanup_zombies() {
 #endif
     }
 }
+
+void set_terminal_foreground(pid_t pgid) {
+    if (isatty(STDIN_FILENO)) {
+        if (tcsetpgrp(STDIN_FILENO, pgid) == -1) {
+            perror("tcsetpgrp");
+            exit(1);
+        }
+    }
+}

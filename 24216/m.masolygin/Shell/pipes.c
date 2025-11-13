@@ -4,6 +4,8 @@
 
 #include "shell.h"
 
+int pipes[MAXCMDS][2];
+
 void create_pipes(int pipes[][2], int ncmds) {
     for (int i = 0; i < ncmds - 1; i++) {
         if (pipe(pipes[i]) == -1) {

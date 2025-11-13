@@ -18,9 +18,7 @@ int main(int argc, char* argv[]) {
     int ncmds;
     char prompt[50]; /* shell prompt */
     pid_t child_pid = -1;
-
-    // TODO: move pipes declaration
-    int pipes[MAXCMDS][2];
+    char cmd_line[MAXLINE] = "";
 
     /* PLACE SIGNAL CODE HERE */
     ignore_signals();
@@ -30,13 +28,8 @@ int main(int argc, char* argv[]) {
         perror("setpgid");
         exit(1);
     }
-    // TODO: function issaty
-    if (isatty(STDIN_FILENO)) {
-        if (tcsetpgrp(STDIN_FILENO, shell_pgid) < 0) {
-            perror("tcsetpgrp");
-            exit(1);
-        }
-    }
+
+    set_terminal_foreground(shell_pgid);
 
     init_jobs();
 
@@ -45,11 +38,6 @@ int main(int argc, char* argv[]) {
     while (promptline(prompt, line, sizeof(line)) > 0) { /* until eof  */
 
         cleanup_zombies();
-
-        // TODO: change orginal_line usage
-        char original_line[MAXLINE];
-        strncpy(original_line, line, MAXLINE - 1);
-        original_line[MAXLINE - 1] = '\0';
 
         if ((ncmds = parseline(line)) <= 0) continue; /* read next line */
 #ifdef DEBUG
@@ -64,98 +52,8 @@ int main(int argc, char* argv[]) {
         }
 #endif
 
-        // TODO: create built-in commands file
-
-        // Exit shell
-        if (strcmp(cmds[0].cmdargs[0], "exit") == 0) {
-            return 0;
-        }
-
-        // Jobs built-in command
-        if (strcmp(cmds[0].cmdargs[0], "jobs") == 0) {
-            list_jobs();
-            continue;
-        }
-
-        // FG built-in command
-        if (strcmp(cmds[0].cmdargs[0], "fg") == 0) {
-            int jid;
-            struct job* jb;
-
-            if (cmds[0].cmdargs[1] != NULL) {
-                if (cmds[0].cmdargs[1][0] == '%') {
-                    jid = atoi(&cmds[0].cmdargs[1][1]);
-                } else {
-                    jid = atoi(cmds[0].cmdargs[1]);
-                }
-                jb = get_job_by_jid(jid);
-            } else {
-                for (int i = MAXJOBS - 1; i >= 0; i--) {
-                    if (jobs[i].pid != 0) {
-                        jb = &jobs[i];
-                        break;
-                    }
-                }
-            }
-
-            if (jb == NULL || jb->pid == 0) {
-                fprintf(stderr, "fg: no such job\n");
-                continue;
-            }
-
-            printf("%s\n", jb->cmdline);
-
-            if (jb->state == STOPPED) {
-                kill(-jb->pgid, SIGCONT);
-            }
-            jb->state = RUNNING;
-
-            if (isatty(STDIN_FILENO)) {
-                tcsetpgrp(STDIN_FILENO, jb->pgid);
-            }
-            handler_child(jb->pid, 1, jb->cmdline);
-            if (isatty(STDIN_FILENO)) {
-                tcsetpgrp(STDIN_FILENO, shell_pgid);
-            }
-            continue;
-        }
-
-        // BG built-in command
-        if (strcmp(cmds[0].cmdargs[0], "bg") == 0) {
-            int jid;
-            struct job* jb;
-
-            if (cmds[0].cmdargs[1] != NULL) {
-                if (cmds[0].cmdargs[1][0] == '%') {
-                    jid = atoi(&cmds[0].cmdargs[1][1]);
-                } else {
-                    jid = atoi(cmds[0].cmdargs[1]);
-                }
-                jb = get_job_by_jid(jid);
-            } else {
-                jb = NULL;
-                for (int i = MAXJOBS - 1; i >= 0; i--) {
-                    if (jobs[i].pid != 0 && jobs[i].state == STOPPED) {
-                        jb = &jobs[i];
-                        break;
-                    }
-                }
-            }
-
-            if (jb == NULL || jb->pid == 0) {
-                fprintf(stderr, "bg: no such job\n");
-                continue;
-            }
-
-            if (jb->state != STOPPED) {
-                fprintf(stderr, "bg: job already running\n");
-                continue;
-            }
-
-            printf("[%d]   %s &\n", jb->jid, jb->cmdline);
-
-            kill(-jb->pgid, SIGCONT);
-            jb->state = RUNNING;
+        if (is_builtin(&cmds[0])) {
+            execute_builtin(&cmds[0]);
             continue;
         }
 
@@ -176,11 +74,12 @@ int main(int argc, char* argv[]) {
                         setpgid(0, pgid);
                     }
 
-                    if (bkgrnd) {
-                        ignore_signals();
-                    } else {
-                        activate_signals();
-                    }
+                    // if (bkgrnd) {
+                    //     ignore_signals();
+                    // } else {
+                    //     activate_signals();
+                    // }
+                    activate_signals();
 
                     setup_pipe_input(pipes, i);
                     setup_pipe_output(pipes, i, ncmds);
@@ -215,19 +114,22 @@ int main(int argc, char* argv[]) {
         }
         close_all_pipes(pipes, ncmds);
 
+        for (int k = 0; k < ncmds; k++) {
+            for (int m = 0; cmds[k].cmdargs[m] != NULL; m++) {
+                strcat(cmd_line, cmds[k].cmdargs[m]);
+                strcat(cmd_line, " ");
+            }
+        }
+
         if (bkgrnd) {
-            int jid = add_job(pgid, pgid, RUNNING, original_line);
+            int jid = add_job(pgid, pgid, RUNNING, cmd_line);
             fprintf(stderr, "[%d] %d\n", jid, pgid);
         } else {
-            if (isatty(STDIN_FILENO)) {
-                tcsetpgrp(STDIN_FILENO, pgid);
-            }
+            set_terminal_foreground(pgid);
 
-            handler_child(pgid, ncmds, original_line);
+            handler_child(pgid, ncmds, cmd_line);
 
-            if (isatty(STDIN_FILENO)) {
-                tcsetpgrp(STDIN_FILENO, shell_pgid);
-            }
+            set_terminal_foreground(shell_pgid);
         }
     } /* close while */
 
