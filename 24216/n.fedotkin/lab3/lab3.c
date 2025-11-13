@@ -1,0 +1,37 @@
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+void checkOpenFile(const char* nameFile) {
+    FILE* file = fopen(nameFile, "rw");
+    if (file == NULL) {
+        perror("Error opening file");
+        return;
+    }
+    fclose(file);
+    printf("File opened successfully\n");
+}
+
+int main() {
+    const char* nameFile = "file.txt";
+
+    printf("Real UID: %d\n", getuid());
+    printf("Effective UID: %d\n", geteuid());
+
+    checkOpenFile(nameFile);
+
+    int res = setuid(getuid());
+    if (res == -1) {
+        perror("Error setting UID");
+        exit(EXIT_FAILURE);
+    }
+    
+    printf("UID changed successfully\n");
+
+    printf("Real UID after setting: %d\n", getuid());
+    printf("Effective UID after setting: %d\n", geteuid());
+
+    checkOpenFile(nameFile);
+
+    exit(EXIT_SUCCESS);
+}
