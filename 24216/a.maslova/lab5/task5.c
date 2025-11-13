@@ -57,7 +57,7 @@ int build_table(int fd, LineTable *tab) {
         }
         total += n;
     }
-    if (start < total & add_line(tab, start, total - start) < 0) return -1;
+    if (start < total && add_line(tab, start, total - start) < 0) return -1;
 
     return 0;
 }
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
     
     LineTable table = {0};
     if (init_table(&table) < 0 || build_table(fd, &table) < 0) {
-        fprintf(stderr, "Failed to build line table\n");
+        perror("Failed to build line table");
         close(fd);
         free(table.lines);
         return 1;
@@ -121,7 +121,7 @@ int main(int argc, char *argv[]) {
     
     printf("Total lines: %d\n", table.count);
     if (process_input(fd, &table) < 0) {
-        fprintf(stderr, "Error processing input\n");
+        perror("Error processing input");
         close(fd);
         free(table.lines);
         return 1;
