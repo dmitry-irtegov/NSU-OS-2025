@@ -60,3 +60,4 @@ core
 core.*
 .nfs*
 .DS_Store
+.vscode/
