@@ -10,10 +10,11 @@ void OpenFile(void) {
     FILE *fp = fopen("file", "r+");
     if (fp == NULL) {
         perror("fopen failed");
-    } else {
-        printf("File opened successfully.\n");
-        fclose(fp);
+        return;
     }
+    
+    printf("File opened successfully.\n");
+    fclose(fp);
 }
 
 int main(void) {
