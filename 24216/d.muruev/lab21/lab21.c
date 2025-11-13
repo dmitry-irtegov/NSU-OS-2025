@@ -17,7 +17,7 @@ void handle_sigint(int sig) {
 
     if (signal(sig, handle_sigint) == SIG_ERR) {
         write(STDERR_FILENO, SIGINT_ERR, sizeof(SIGINT_ERR));
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 }
 
@@ -27,7 +27,7 @@ void handle_sigquit(int sig) {
 
     if (signal(sig, handle_sigquit) == SIG_ERR) {
         write(STDERR_FILENO, SIGQUIT_ERR, sizeof(SIGQUIT_ERR));
-        exit(EXIT_FAILURE);
+        _exit(EXIT_FAILURE);
     }
 }
 
