@@ -20,12 +20,12 @@ int ask_question(char* answer) {
     }
     
     int char_read = read(STDIN_FILENO, answer, 1);
-    if (char_read == (-1)) return -1;
+    int status = tcsetattr(STDIN_FILENO, TCSANOW, &old);
 
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &old)) {
+    if (char_read == (-1) || status != 0) {
         return -1;
     }
-
+    
     return 0;
 }
 
