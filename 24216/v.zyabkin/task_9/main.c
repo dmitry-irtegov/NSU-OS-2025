@@ -7,22 +7,23 @@
 int main() {
     pid_t pid = fork();
 
-    if (pid < 0) {
-        perror("fork failed");
-        exit(1);
+    switch(pid) {
+        case -1:
+            perror("fork failed");
+            exit(1);
+        case 0:
+            execlp("cat", "cat", "test.txt", NULL);
+            perror("execlp failed");
+            exit(1);
+        default:
+            switch (waitpid(pid, NULL, 0)) {
+                case -1:
+                    perror("waitpid failed");
+                    exit(1);
+                default:
+                    printf("\npreproccess finished successfully!\n");
+            }
     }
 
-    if (pid == 0) {
-        execlp("cat", "cat", "test.txt", NULL);
-        perror("execlp failed");
-        exit(1);
-    } else {
-        if (waitpid(pid, NULL, 0) != -1) {
-            printf("\npreproccess finished successfully!\n");
-        } else {
-            perror("waitpid failed");
-            exit(1);
-        }
-    }
     return 0;
 }
