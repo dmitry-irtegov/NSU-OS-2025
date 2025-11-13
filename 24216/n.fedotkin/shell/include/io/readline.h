@@ -10,7 +10,7 @@ typedef struct Reader {
     char *buffer;
     size_t buffer_size;
     size_t chars_read;
-    int in_quotes;
+    char quote_type;
     int is_multiline;
 } reader_t;
 

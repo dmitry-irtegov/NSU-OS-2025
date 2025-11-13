@@ -126,17 +126,21 @@ command_t* parse_command(char** stream) {
 char* extract_next_arg(char** stream) {
     char* start = *stream;
     int is_escaped = 0;
-    int in_quotes = 0;
+    char quote_type = 0;
 
     while (!check_to_end_of_stream(**stream)) {
         char cur = **stream;
 
         if (cur == '\\' && !is_escaped) {
             is_escaped = 1;
-        } else if (cur == '"' && !is_escaped) {
-            in_quotes = !in_quotes;
+        } else if ((cur == '"' || cur == '\'') && !is_escaped) {
+            if (quote_type == 0) {
+                quote_type = cur;
+            } else if (quote_type == cur) {
+                quote_type = 0;
+            }
         } else if ((check_to_whitespace(cur) || check_delimeter(cur)
-         || check_redirect(cur) || check_command_delimeter(cur)) && !in_quotes && !is_escaped) {
+         || check_redirect(cur) || check_command_delimeter(cur)) && quote_type == 0 && !is_escaped) {
             break;
         } else {
             is_escaped = 0;
@@ -144,7 +148,7 @@ char* extract_next_arg(char** stream) {
         (*stream)++;
     }
 
-    if (in_quotes) {
+    if (quote_type != 0) {
         set_error(ERROR_UNMATCHED_QUOTES, "Unmatched quotes found");
         return NULL;
     }
@@ -239,17 +243,30 @@ char* create_unescaped_string(char* start, size_t length) {
 
     size_t j = 0;
     int is_escaped = 0;
+    char quote_type = 0;
+    
     for (size_t i = 0; i < length; i++) {
-        if (start[i] == '\\' && !is_escaped) {
+        char cur = start[i];
+
+        if ((cur == '"' || cur == '\'') && !is_escaped) {
+            if (quote_type == 0) {
+                quote_type = cur;
+                continue;
+            } else if (quote_type == cur) {
+                quote_type = 0;
+                continue;
+            }
+        }
+
+        if (cur == '\\' && !is_escaped && quote_type != '\'') {
             is_escaped = 1;
             continue;
         }
-        else if (start[i] == '"' && !is_escaped) {
-            continue;
-        }
-        result_str[j++] = start[i];
+        
+        result_str[j++] = cur;
         is_escaped = 0;
     }
+    
     result_str[j] = '\0';
     return result_str;
 }
@@ -257,18 +274,30 @@ char* create_unescaped_string(char* start, size_t length) {
 size_t calculate_unescaped_length(char* start, size_t length) {
     size_t final_length = 0;
     int is_escaped = 0;
+    char quote_type = 0;
 
     for (size_t i = 0; i < length; i++) {
-        if (start[i] == '\\' && !is_escaped) {
+        char cur = start[i];
+
+        if ((cur == '"' || cur == '\'') && !is_escaped) {
+            if (quote_type == 0) {
+                quote_type = cur;
+                continue;
+            } else if (quote_type == cur) {
+                quote_type = 0;
+                continue;
+            }
+        }
+
+        if (cur == '\\' && !is_escaped && quote_type != '\'') {
             is_escaped = 1;
             continue;
         }
-        else if (start[i] == '"' && !is_escaped) {
-            continue;
-        }
+        
         final_length++;
         is_escaped = 0;
     }
+    
     return final_length;
 }
 
