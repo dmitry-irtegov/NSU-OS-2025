@@ -7,10 +7,10 @@ struct command
     char cmdflag;
 };
 
-/*  cmdflag's  */
 #define OUTPIP 01
 #define INPIP 02
 
+extern struct termios shell_termios;
 extern struct command cmds[];
 extern char *infile, *outfile, *appfile;
 extern char bkgrnd;

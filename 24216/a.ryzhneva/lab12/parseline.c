@@ -88,6 +88,15 @@ int parseline(char *line)
                 ++ncmds;
                 nargs = 0;
                 break;
+            case '\"':
+                cmds[ncmds].cmdargs[nargs++] = ++s;
+                s = strpbrk(s, "\"");
+                if (s == NULL) {
+                    fprintf(stderr, "syntax error\n");
+                    return -1;
+                }
+                *s++ = '\0';
+                break;
             default:
                 /*  a command argument  */
                 if (nargs == 0) /* next command */
@@ -117,9 +126,7 @@ int parseline(char *line)
     return(rval);
 }
 
-static char *
-blankskip(register char *s)
-{
+static char *blankskip(register char *s){
     while (isspace(*s) && *s) ++s;
         return(s);
 }
