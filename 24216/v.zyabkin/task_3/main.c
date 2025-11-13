@@ -1,31 +1,28 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <errno.h>
 #include <stdlib.h>
 
 
-void print_user_ids() {
-    uid_t real_uid = getuid();
-    uid_t effective_uid = geteuid();
+void print_and_open(const char *filename) {
+    printf("Real UID: %d\n", getuid());
+    printf("Effective UID: %d\n", geteuid());
 
-    printf("Real UID: %d.\n", real_uid);
-    printf("Effective UID: %d.\n", effective_uid);
-}
-
-void open_file(const char *filename) {
-    FILE *file = fopen("test.txt", "r");
-    if (file) {
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror("fopen failed");
+    } else {
         fclose(file);
-        return;
+        printf("File '%s' opened successfully.\n", filename);
     }
-    perror("fopen failed");
+
+    printf("\n");
 }
+
 
 int main() {
-    print_user_ids();
-    open_file("test.txt");
+    print_and_open("test.txt");
 
     uid_t real_uid = getuid();
     if (setuid(real_uid) == -1) {
@@ -33,8 +30,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
-    print_user_ids();
-    open_file("test.txt");
+    print_and_open("test.txt");
 
-    exit(0);
+    return 0;
 }
