@@ -15,7 +15,7 @@ void sigcatch(int sig)
             break;
             
         case SIGINT:
-            write(STDOUT_FILENO, "Beep\n\a", 6);
+            write(STDOUT_FILENO, "Beep\a\n", sizeof("Beep\n\a") - 1);
             count++;
             break;
     }
