@@ -5,7 +5,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-
 int main() {
     struct termios old, new;
 
@@ -28,6 +27,12 @@ int main() {
     symbol = fgetc(stdin);
     if (symbol == EOF) {
         perror("Error reading character");
+
+        if (tcsetattr(fileno(stdin), TCSANOW, &old) == -1) {
+            perror("Error restoring terminal attributes");
+            exit(EXIT_FAILURE);
+        }
+
         exit(EXIT_FAILURE);
     }
     printf("\nYou pressed: %c\n", symbol);
