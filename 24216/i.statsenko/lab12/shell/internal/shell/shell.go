@@ -97,6 +97,9 @@ func (shell *Shell) launchPipe(i int) (int, error) {
 			break
 		}
 	}
+	if newI == shell.commands.Ncmds {
+		return newI, fmt.Errorf("syntax error: нет команды после конвейера")
+	}
 	pgid, err := shell.commands.Cmds[newI].Run(shell.procManager, 0)
 	if err != nil {
 		return newI, err

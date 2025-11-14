@@ -18,9 +18,10 @@ const (
 )
 
 type ProcessData struct {
-	Status int
-	jobID  int
-	IsPipe bool
+	Status       int
+	jobID        int
+	IsPipe       bool
+	TextCommands string
 }
 
 type pgid = int
@@ -172,7 +173,7 @@ func (pm *Manager) stop(pid pgid) {
 	pm.jobsCount++
 	pm.jobsID++
 	data.jobID = pm.jobsID
-	fmt.Printf("\n[%d] Остановлен %d\n", data.jobID, pid)
+	fmt.Printf("\n[%d]+ Остановлен     %s\n", data.jobID, data.TextCommands)
 	pm.processes[pid] = data
 }
 
@@ -184,7 +185,7 @@ func (pm *Manager) delete(pid pgid) {
 		return
 	}
 	if data.Status != Foreground {
-		fmt.Printf("\n[%d] Завершен %d\n", data.jobID, pid)
+		fmt.Printf("\n[%d]+ Завершен     %s\n", data.jobID, data.TextCommands)
 		pm.jobsCount--
 		if pm.jobsCount == 0 {
 			pm.jobsID = 0
@@ -198,16 +199,43 @@ func (pm *Manager) GetJobs() []string {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 	jobs := make([]string, 0, 32)
-	for pid, data := range pm.processes {
+	for _, data := range pm.processes {
 		switch data.Status {
 		case Background:
-			jobs = append(jobs, fmt.Sprintf("[%d] Выполняется %d", data.jobID, pid))
+			jobs = append(jobs, fmt.Sprintf("[%d] Выполняется     %s", data.jobID, data.TextCommands))
 		case Stopped:
-			jobs = append(jobs, fmt.Sprintf("[%d] Остановлен %d", data.jobID, pid))
+			jobs = append(jobs, fmt.Sprintf("[%d] Остановлен     %s", data.jobID, data.TextCommands))
 		case Foreground:
 		}
 	}
 	return jobs
+}
+
+func (pm *Manager) GetNearestJobID(typeReq int) (int, error) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	nearestID := -1
+	for _, data := range pm.processes {
+		if data.jobID > nearestID {
+			switch typeReq {
+			case Stopped:
+			case Foreground:
+				if data.Status != Foreground {
+					nearestID = data.jobID
+				}
+			case Background:
+				if data.Status == Stopped {
+					nearestID = data.jobID
+				}
+			default:
+				return -1, fmt.Errorf("неизвестный тип запроса")
+			}
+		}
+	}
+	if nearestID == -1 {
+		return -1, fmt.Errorf("нет доступных заданий")
+	}
+	return nearestID, nil
 }
 
 func (pm *Manager) ToBackground(jobID int) error {

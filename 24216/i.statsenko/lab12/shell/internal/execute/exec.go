@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"shell/internal/process"
 	"strconv"
+	"strings"
 	"syscall"
 )
 
@@ -98,8 +99,9 @@ func (command *Command) Wait(pm *process.Manager, pid Pgid) {
 	}
 	isPipe := command.InPipe != nil
 	data := process.ProcessData{
-		Status: status,
-		IsPipe: isPipe,
+		Status:       status,
+		IsPipe:       isPipe,
+		TextCommands: strings.Join(command.Cmdargs, " "),
 	}
 	if command.Bkgrnd {
 		go pm.Wait(pid, data)
@@ -137,31 +139,39 @@ func (command *Command) shellCommands(pm *process.Manager) (bool, error) {
 		}
 		return true, nil
 	case "bg":
-		if len(command.Cmdargs) != 2 {
+		switch len(command.Cmdargs) {
+		case 1:
+			jobId, err := pm.GetNearestJobID(process.Background)
+			if err != nil {
+				return true, err
+			}
+			return true, pm.ToBackground(jobId)
+		case 2:
+			jobId, err := strconv.Atoi(command.Cmdargs[1])
+			if err != nil {
+				return true, fmt.Errorf("bg: аргумент не является числом")
+			}
+			return true, pm.ToBackground(jobId)
+		default:
 			return true, fmt.Errorf("bg: неверное количество аргументов")
 		}
-		jobId, err := strconv.Atoi(command.Cmdargs[1])
-		if err != nil {
-			return true, fmt.Errorf("bg: аргумент не является числом")
-		}
-		err = pm.ToBackground(jobId)
-		if err != nil {
-			return true, err
-		}
-		return true, nil
 	case "fg":
-		if len(command.Cmdargs) != 2 {
+		switch len(command.Cmdargs) {
+		case 1:
+			jobId, err := pm.GetNearestJobID(process.Foreground)
+			if err != nil {
+				return true, err
+			}
+			return true, pm.ToForeground(jobId)
+		case 2:
+			jobId, err := strconv.Atoi(command.Cmdargs[1])
+			if err != nil {
+				return true, fmt.Errorf("fg: аргумент не является числом")
+			}
+			return true, pm.ToForeground(jobId)
+		default:
 			return true, fmt.Errorf("fg: неверное количество аргументов")
 		}
-		jobId, err := strconv.Atoi(command.Cmdargs[1])
-		if err != nil {
-			return true, fmt.Errorf("fg: аргумент не является числом")
-		}
-		err = pm.ToForeground(jobId)
-		if err != nil {
-			return true, err
-		}
-		return true, nil
 	}
 	return false, nil
 }
