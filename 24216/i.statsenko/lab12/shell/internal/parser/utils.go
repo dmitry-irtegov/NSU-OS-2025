@@ -3,7 +3,6 @@ package parser
 import (
 	"bufio"
 	"os"
-	"slices"
 	"unicode"
 )
 
@@ -29,7 +28,7 @@ func (parser *Parser) strpbrk() string {
 			currentQuote = rune(0)
 		case currentQuote == rune(0) && (char == '\'' || char == '"'):
 			currentQuote = char
-		case currentQuote == rune(0) && slices.Contains([]rune(delim), char):
+		case currentQuote == rune(0) && parser.contains(delim, char):
 			return string(name)
 		default:
 			name = append(name, char)
@@ -83,4 +82,13 @@ func (parser *Parser) promptline() error {
 	parser.index = 0
 	parser.length = len(parser.commandLine)
 	return nil
+}
+
+func (parser *Parser) contains(str string, del rune) bool {
+	for _, elem := range str {
+		if elem == del {
+			return true
+		}
+	}
+	return false
 }
