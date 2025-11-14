@@ -32,6 +32,10 @@ int main(int argc, char** argv){
         }
     }
 
+    if (str != NULL) {
+        free(str);
+    }
+
     pclose(output);
     fclose(file);
 
