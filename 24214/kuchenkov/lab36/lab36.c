@@ -172,6 +172,8 @@ void change_termios() {
     tcgetattr(STDIN_FILENO, &termios_orig);
     struct termios termios_new = termios_orig;
     termios_new.c_lflag &= ~(ICANON | ECHO);
+    termios_new.c_cc[VMIN] = 1;
+    termios_new.c_cc[VTIME] = 0;
     tcsetattr(STDIN_FILENO, TCSANOW, &termios_new);
 }
 
