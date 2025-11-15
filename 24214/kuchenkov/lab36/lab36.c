@@ -96,7 +96,7 @@ int connect_to_host(const char *url) {
 }
 
 void skip_http_headers(int socket_fd) {
-    char buffer[4] = {0, 0, 0, 0};
+    char buffer[4] = {0};
     int bytes_read;
     while ((bytes_read = read(socket_fd, &buffer[3], 1)) > 0) {
         if (buffer[0] == '\r' && buffer[1] == '\n' &&
@@ -135,11 +135,16 @@ void process_response(int client_socket) {
 
         if (FD_ISSET(STDIN_FILENO, &set)) {
             char c;
-            read(STDIN_FILENO, &c, 1);
-            if (c == ' ' && paused) {
-                line_count = 0;
-                paused = 0;
+            if (read(STDIN_FILENO, &c, 1) == 1) {
+                if (c == ' ' && paused) {
+                    line_count = 0;
+                    paused = 0;
+                }
+            } else {
+                perror("read");
+                break;
             }
+            
         }
 
         if (FD_ISSET(client_socket, &set)) {
@@ -169,16 +174,25 @@ void process_response(int client_socket) {
 }
 
 void change_termios() {
-    tcgetattr(STDIN_FILENO, &termios_orig);
+    if (tcgetattr(STDIN_FILENO, &termios_orig) == -1) {
+        perror("tcgetattr");
+        exit(EXIT_FAILURE);
+    }
     struct termios termios_new = termios_orig;
     termios_new.c_lflag &= ~(ICANON | ECHO);
     termios_new.c_cc[VMIN] = 1;
     termios_new.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &termios_new);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &termios_new) == -1) {
+        perror("tcsetattr");
+        exit(EXIT_FAILURE);
+    }
 }
 
 void backup_termios() {
-    tcsetattr(STDIN_FILENO, TCSANOW, &termios_orig);
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &termios_orig) == -1) {
+        perror("tcsetattr");
+        exit(EXIT_FAILURE);
+    }
 }
 
 int main(int argc, char *argv[]) {
