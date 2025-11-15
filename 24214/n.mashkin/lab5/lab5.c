@@ -33,6 +33,7 @@ int main() {
                     if (table == NULL) {
                         perror("Could not realloc memory");
                         close(fd);
+                        free(table);
                         exit(-1);
                     }
                 }
@@ -84,18 +85,15 @@ int main() {
             free(table);
             exit(-1);
         }
+        off_t remaining = table[answer] - table[answer - 1];
         while ((has_read = read(fd, buf, 4096)) > 0) {
-            int line_end = 0;
-            for (int i = 0; i < has_read; i++) {
-                printf("%c", buf[i]);
-                if (buf[i] == '\n') {
-                    line_end = 1;
-                    break;
-                }
-            }
-            if (line_end) {
+            if (remaining < 4096 || buf[4095] == '\n') {
+                buf[remaining - 1] = '\0';
+                printf("%s\n", buf);
                 break;
             }
+            printf("%s", buf);
+            remaining -= 4096;
         }
         if (has_read == -1) {
             perror("Error while reading a file");
