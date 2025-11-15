@@ -8,22 +8,44 @@ void execute_commands()
         return;
     }
 
-    pid_t pid;
+    pid_t pid, pgid = 0;
     int status;
+    char command_line[MAX_LINE];
+
+    strcpy(command_line, cmds[0].cmdargs[0]);
+    if (bkgrnd)
+    {
+        strcat(command_line, " &");
+    }
 
     pid = fork();
     if (pid == 0) // Дочерний процесс
     {
+        pid = getpid();
+        if (pgid == 0)
+            pgid = pid;
+        setpgid(pid, pgid);
+
+        if (!bkgrnd && shell_is_interactive)
+        {
+            tcsetpgrp(shell_terminal, pgid);
+        }
+
         if (bkgrnd)
         {
-            signal(SIGINT, SIG_IGN);
-            signal(SIGQUIT, SIG_IGN);
+            signal(SIGINT, SIG_DFL);
+            signal(SIGQUIT, SIG_DFL);
+            signal(SIGTSTP, SIG_DFL);
+            signal(SIGTTIN, SIG_DFL);
+            signal(SIGTTOU, SIG_DFL);
         }
         else
         {
             signal(SIGINT, SIG_DFL);
             signal(SIGQUIT, SIG_DFL);
             signal(SIGTSTP, SIG_DFL);
+            signal(SIGTTIN, SIG_DFL);
+            signal(SIGTTOU, SIG_DFL);
         }
 
         setup_redirections();
@@ -41,32 +63,39 @@ void execute_commands()
     }
     else if (pid > 0) // Родительский процесс
     {
+        if (pgid == 0)
+            pgid = pid;
+        setpgid(pid, pgid);
+
         if (bkgrnd)
         {
-            add_job(pid, cmds[0].cmdargs[0]);
+            add_job(pid, pgid, command_line);
             printf("[%d] %d\n", get_job_count(), pid);
         }
         else
         {
-            set_foreground_pid(pid);
+            if (shell_is_interactive)
+            {
+                tcsetpgrp(shell_terminal, pgid);
+            }
 
-            signal(SIGINT, SIG_IGN);
-            signal(SIGQUIT, SIG_IGN);
+            set_foreground_job(pgid);
 
             waitpid(pid, &status, WUNTRACED);
 
-            if (WIFSTOPPED(status))
+            if (shell_is_interactive)
             {
-                add_job(pid, cmds[0].cmdargs[0]);
-                set_job_status(pid, JOB_STOPPED);
-                printf("[%d] Stopped\t\t%s\n", get_job_count(), cmds[0].cmdargs[0]);
+                tcsetpgrp(shell_terminal, shell_pgid);
             }
 
-            set_foreground_pid(0);
+            if (WIFSTOPPED(status))
+            {
+                add_job(pid, pgid, command_line);
+                set_job_status(pid, JOB_STOPPED);
+                printf("[%d] Stopped\t\t%s\n", get_job_count(), command_line);
+            }
 
-            signal(SIGINT, handle_sigint);
-            signal(SIGQUIT, sigquit_handler);
-            signal(SIGTSTP, handle_sigtstp);
+            set_foreground_job(0);
         }
     }
     else
@@ -118,8 +147,8 @@ void execute_pipeline()
 {
     int pipes[MAX_CMDS - 1][2];
     pid_t pids[MAX_CMDS];
+    pid_t pgid = 0;
 
-    // Создаем pipes
     for (int i = 0; i < num_cmds - 1; i++)
     {
         if (pipe(pipes[i]) < 0)
@@ -134,6 +163,12 @@ void execute_pipeline()
         pids[i] = fork();
         if (pids[i] == 0)
         {
+            pid_t pid = getpid();
+
+            if (pgid == 0)
+                pgid = pid;
+            setpgid(pid, pgid);
+
             if (i > 0)
             {
                 dup2(pipes[i - 1][0], STDIN_FILENO);
@@ -151,6 +186,17 @@ void execute_pipeline()
 
             execvp(cmds[i].cmdargs[0], cmds[i].cmdargs);
             perror(cmds[i].cmdargs[0]);
+            exit(1);
+        }
+        else if (pids[i] > 0)
+        {
+            if (pgid == 0)
+                pgid = pids[i];
+            setpgid(pids[i], pgid);
+        }
+        else
+        {
+            perror("fork");
             exit(1);
         }
     }

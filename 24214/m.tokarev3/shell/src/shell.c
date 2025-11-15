@@ -7,6 +7,11 @@ char *appfile = NULL;
 int bkgrnd = 0;
 int num_cmds = 0;
 
+struct termios shell_tmodes;
+int shell_terminal;
+int shell_is_interactive;
+pid_t shell_pgid;
+
 void print_prompt(char *name)
 {
     printf("[%s] ", name);
@@ -22,25 +27,23 @@ int main(int argc, char **argv)
     char line[MAX_LINE];
     struct sigaction sa;
 
-    // Настройка обработчика SIGINT (Ctrl+C)
+    init_shell();
+
     sa.sa_handler = handle_sigint;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGINT, &sa, NULL);
 
-    // Настройка обработчика SIGQUIT (Ctrl+\)
     sa.sa_handler = sigquit_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGQUIT, &sa, NULL);
 
-    // Настройка обработчика SIGTSTP (Ctrl+Z)
     sa.sa_handler = handle_sigtstp;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGTSTP, &sa, NULL);
 
-    // Настройка обработчика SIGCHLD
     sa.sa_handler = handle_sigchld;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;

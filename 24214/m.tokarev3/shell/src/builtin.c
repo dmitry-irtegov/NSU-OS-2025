@@ -58,7 +58,6 @@ void cd_handler()
         }
     }
 
-    // Попытка смены директории
     if (chdir(dir) != 0)
     {
         perror("cd");

@@ -11,6 +11,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <termios.h>
+#include <errno.h>
 
 #define DEFAULT_SHELL_NAME "mega_shell_3000"
 
@@ -29,9 +31,12 @@ typedef enum
 typedef struct
 {
     pid_t pid;
+    pid_t pgid;
     int job_id;
     char command[MAX_LINE];
     job_status_t status;
+    struct termios tmodes;
+    int tmodes_set;
 } job_t;
 
 typedef struct command
@@ -49,6 +54,12 @@ extern int bkgrnd;
 
 extern int num_cmds;
 
+// Terminal management
+extern struct termios shell_tmodes;
+extern int shell_terminal;
+extern int shell_is_interactive;
+extern pid_t shell_pgid;
+
 // parseline.c
 int parseline(char *line);
 
@@ -61,19 +72,22 @@ void execute_pipeline();
 
 // jobs.c
 void initialize_jobs();
+void init_shell();
 
 void handle_sigtstp(int sig);
 void handle_sigint(int sig);
 void handle_sigchld(int sig);
 
-void add_job(pid_t pid, char *command);
+void add_job(pid_t pid, pid_t pgid, char *command);
 int get_job_count();
 
 void check_jobs();
 void print_jobs();
 void cleanup_jobs();
 void set_job_status(pid_t pid, job_status_t status);
-void set_foreground_pid(pid_t pid);
+void set_foreground_job(pid_t pgid);
+void put_job_in_foreground(job_t *j, int cont);
+void put_job_in_background(job_t *j, int cont);
 
 int find_job_by_id(int job_id);
 int find_latest_stopped_job();
