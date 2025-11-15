@@ -119,7 +119,8 @@ void process_response(int client_socket) {
     int bytes_in_buffer = 0;
     int buffer_pos = 0;
     
-    while (1) {
+    int running = 1;
+    while (running) {
         FD_ZERO(&set);
         if (buffer_pos == bytes_in_buffer) {
             FD_SET(client_socket, &set);
@@ -130,16 +131,20 @@ void process_response(int client_socket) {
         int ready = select(client_socket + 1, &set, NULL, NULL, (buffer_pos < bytes_in_buffer) ? &timeout : NULL);
         if (ready == -1) {
             perror("select");
-            break;
+            running = 0;
         }
 
         if (FD_ISSET(STDIN_FILENO, &set)) {
             char c;
-            if (read(STDIN_FILENO, &c, 1) == 1) {
+            int read_ans = read(STDIN_FILENO, &c, 1);
+            if (read_ans == 1) {
                 if (c == ' ' && paused) {
                     line_count = 0;
                     paused = 0;
                 }
+            } else if (read_ans == 0) {
+                printf("EOF on stdin\n");
+                break;
             } else {
                 perror("read");
                 break;
@@ -158,7 +163,11 @@ void process_response(int client_socket) {
 
         if (!paused) {
             while (buffer_pos < bytes_in_buffer) {
-                write(STDOUT_FILENO, &buffer[buffer_pos], 1);
+                if (write(STDOUT_FILENO, &buffer[buffer_pos], 1) == -1) {
+                    perror("write");
+                    running = 0;
+                    break;
+                }
                 if (buffer[buffer_pos] == '\n') {
                     line_count++;
                 }
@@ -178,6 +187,7 @@ void change_termios() {
         perror("tcgetattr");
         exit(EXIT_FAILURE);
     }
+    atexit(backup_termios);
     struct termios termios_new = termios_orig;
     termios_new.c_lflag &= ~(ICANON | ECHO);
     termios_new.c_cc[VMIN] = 1;
@@ -210,7 +220,6 @@ int main(int argc, char *argv[]) {
 
     process_response(client_socket);
 
-    backup_termios();
     close(client_socket);
     return 0;
 }
