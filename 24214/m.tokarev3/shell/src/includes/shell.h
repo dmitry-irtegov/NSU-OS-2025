@@ -59,25 +59,28 @@ extern struct termios shell_tmodes;
 extern int shell_terminal;
 extern int shell_is_interactive;
 extern pid_t shell_pgid;
+extern pid_t foreground_pgid;
 
 // parseline.c
 int parseline(char *line);
 
 // execute.c
 void execute_commands();
-
-// execute.c
 void setup_redirections();
 void execute_pipeline();
 
-// jobs.c
-void initialize_jobs();
+// shell.c
+void print_prompt(char *name);
 void init_shell();
 
+// signals.c
 void handle_sigtstp(int sig);
 void handle_sigint(int sig);
 void handle_sigchld(int sig);
+void handler_sigquit(int sig);
 
+// jobs.c
+void initialize_jobs();
 void add_job(pid_t pid, pid_t pgid, char *command);
 int get_job_count();
 
@@ -99,10 +102,3 @@ void bg_handler();
 int is_builtin(char *arg);
 void execute_builtin();
 void cd_handler();
-
-// signal handlers
-void sigint_handler(int sig);
-void sigquit_handler(int sig);
-
-// shell.c
-void print_prompt(char *name);

@@ -18,8 +18,34 @@ void print_prompt(char *name)
     fflush(stdout);
 }
 
-void sigquit_handler(int sig)
+void init_shell()
 {
+    shell_terminal = STDIN_FILENO;
+    shell_is_interactive = isatty(shell_terminal);
+
+    if (shell_is_interactive)
+    {
+        while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
+            kill(-shell_pgid, SIGTTIN);
+
+        signal(SIGINT, SIG_IGN);
+        signal(SIGQUIT, SIG_IGN);
+        signal(SIGTSTP, SIG_IGN);
+        signal(SIGTTIN, SIG_IGN);
+        signal(SIGTTOU, SIG_IGN);
+        signal(SIGCHLD, SIG_IGN);
+
+        shell_pgid = getpid();
+        if (setpgid(shell_pgid, shell_pgid) < 0)
+        {
+            perror("Couldn't put the shell in its own process group");
+            exit(1);
+        }
+
+        tcsetpgrp(shell_terminal, shell_pgid);
+
+        tcgetattr(shell_terminal, &shell_tmodes);
+    }
 }
 
 int main(int argc, char **argv)
@@ -34,7 +60,7 @@ int main(int argc, char **argv)
     sa.sa_flags = SA_RESTART;
     sigaction(SIGINT, &sa, NULL);
 
-    sa.sa_handler = sigquit_handler;
+    sa.sa_handler = SIG_IGN;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGQUIT, &sa, NULL);

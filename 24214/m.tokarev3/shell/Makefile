@@ -20,7 +20,8 @@ SOURCES = \
     $(SRCDIR)/builtin.c \
 	$(SRCDIR)/jobs.c \
 	$(SRCDIR)/execute.c \
-    $(SRCDIR)/parseline.c
+    $(SRCDIR)/parseline.c \
+    $(SRCDIR)/signals.c
 
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 

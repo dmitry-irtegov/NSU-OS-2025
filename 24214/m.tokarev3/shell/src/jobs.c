@@ -2,39 +2,7 @@
 
 static job_t jobs[MAX_JOBS];
 static int job_count = 0;
-static pid_t foreground_pgid = 0;
-
-void init_shell()
-{
-    shell_terminal = STDIN_FILENO;
-    shell_is_interactive = isatty(shell_terminal);
-
-    if (shell_is_interactive)
-    {
-        while (tcgetpgrp(shell_terminal) != (shell_pgid = getpgrp()))
-            kill(-shell_pgid, SIGTTIN);
-
-        signal(SIGINT, SIG_IGN);
-        signal(SIGQUIT, SIG_IGN);
-        signal(SIGTSTP, SIG_IGN);
-        signal(SIGTTIN, SIG_IGN);
-        signal(SIGTTOU, SIG_IGN);
-        signal(SIGCHLD, SIG_IGN);
-
-        shell_pgid = getpid();
-        if (setpgid(shell_pgid, shell_pgid) < 0)
-        {
-            perror("Couldn't put the shell in its own process group");
-            exit(1);
-        }
-
-        // Получаем управление терминалом
-        tcsetpgrp(shell_terminal, shell_pgid);
-
-        // Сохраняем атрибуты терминала по умолчанию
-        tcgetattr(shell_terminal, &shell_tmodes);
-    }
-}
+pid_t foreground_pgid = 0;
 
 void initialize_jobs()
 {
@@ -227,60 +195,6 @@ int find_job_by_id(int job_id)
         }
     }
     return -1;
-}
-
-void handle_sigtstp(int sig)
-{
-    if (foreground_pgid > 0 && foreground_pgid != shell_pgid)
-    {
-        if (kill(-foreground_pgid, SIGTSTP) == 0)
-        {
-            printf("\n");
-        }
-        else
-        {
-            perror("kill");
-            printf("\n");
-            print_prompt(DEFAULT_SHELL_NAME);
-            fflush(stdout);
-        }
-    }
-    else
-    {
-        printf("\n");
-        print_prompt(DEFAULT_SHELL_NAME);
-        fflush(stdout);
-    }
-}
-
-void handle_sigint(int sig)
-{
-    if (foreground_pgid > 0 && foreground_pgid != shell_pgid)
-    {
-        if (kill(-foreground_pgid, SIGINT) == 0)
-        {
-            printf("\n");
-        }
-        else
-        {
-            perror("kill");
-            printf("\n");
-            print_prompt(DEFAULT_SHELL_NAME);
-            fflush(stdout);
-        }
-    }
-    else
-    {
-        printf("\n");
-        print_prompt(DEFAULT_SHELL_NAME);
-        fflush(stdout);
-    }
-}
-
-void handle_sigchld(int sig)
-{
-    // Простой обработчик - основная работа делается в check_jobs()
-    // Это более переносимое решение
 }
 
 void cleanup_jobs()
