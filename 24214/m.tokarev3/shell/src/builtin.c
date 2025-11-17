@@ -61,5 +61,20 @@ void cd_handler()
     if (chdir(dir) != 0)
     {
         perror("cd");
+        return;
+    }
+
+    // Обновляем переменную PWD
+    char current_dir[PATH_MAX];
+    if (getcwd(current_dir, sizeof(current_dir)) != NULL)
+    {
+        if (setenv("PWD", current_dir, 1) != 0)
+        {
+            perror("cd: failed to set PWD");
+        }
+    }
+    else
+    {
+        perror("cd: failed to get current directory");
     }
 }

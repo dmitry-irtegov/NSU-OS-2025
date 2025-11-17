@@ -12,15 +12,13 @@ void handle_sigtstp(int sig)
         {
             perror("kill");
             printf("\n");
-            print_prompt(DEFAULT_SHELL_NAME);
-            fflush(stdout);
+            print_prompt();
         }
     }
     else
     {
         printf("\n");
-        print_prompt(DEFAULT_SHELL_NAME);
-        fflush(stdout);
+        print_prompt();
     }
 }
 
@@ -36,15 +34,13 @@ void handle_sigint(int sig)
         {
             perror("kill");
             printf("\n");
-            print_prompt(DEFAULT_SHELL_NAME);
-            fflush(stdout);
+            print_prompt();
         }
     }
     else
     {
         printf("\n");
-        print_prompt(DEFAULT_SHELL_NAME);
-        fflush(stdout);
+        print_prompt();
     }
 }
 

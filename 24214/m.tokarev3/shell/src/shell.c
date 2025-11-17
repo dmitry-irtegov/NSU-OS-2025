@@ -12,9 +12,18 @@ int shell_terminal;
 int shell_is_interactive;
 pid_t shell_pgid;
 
-void print_prompt(char *name)
+void print_prompt()
 {
-    printf("[%s] ", name);
+    char *pwd = getenv("PWD");
+    char *user = getenv("USER");
+    if (user && pwd)
+    {
+        printf("%s:%s ", user, pwd);
+    }
+    else
+    {
+        printf("[%s] ", DEFAULT_SHELL_NAME);
+    }
     fflush(stdout);
 }
 
@@ -81,7 +90,7 @@ int main(int argc, char **argv)
     {
         check_jobs();
 
-        print_prompt(DEFAULT_SHELL_NAME);
+        print_prompt();
 
         if (fgets(line, MAX_LINE, stdin) == NULL)
         {

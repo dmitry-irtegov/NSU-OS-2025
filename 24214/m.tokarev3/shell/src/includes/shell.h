@@ -13,6 +13,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <errno.h>
+#include <limits.h>
 
 #define DEFAULT_SHELL_NAME "mega_shell_3000"
 
@@ -70,7 +71,7 @@ void setup_redirections();
 void execute_pipeline();
 
 // shell.c
-void print_prompt(char *name);
+void print_prompt();
 void init_shell();
 
 // signals.c
