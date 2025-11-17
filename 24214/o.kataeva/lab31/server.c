@@ -112,7 +112,6 @@ int main(void) {
                         buf[j] = toupper((unsigned char)buf[j]);
                     }
                     write(STDOUT_FILENO, buf, n);
-                    fsync(STDOUT_FILENO);
                 }
             }
         }
