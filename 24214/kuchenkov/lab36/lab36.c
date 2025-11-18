@@ -95,22 +95,31 @@ int connect_to_host(const char *url) {
     return client_socket;
 }
 
-void skip_http_headers(int socket_fd) {
+int skip_http_headers(int socket_fd) {
     char buffer[4] = {0};
     int bytes_read;
     while ((bytes_read = read(socket_fd, &buffer[3], 1)) > 0) {
         if (buffer[0] == '\r' && buffer[1] == '\n' &&
             buffer[2] == '\r' && buffer[3] == '\n') {
-            return;
+            return 0;
         }
         buffer[0] = buffer[1];
         buffer[1] = buffer[2];
         buffer[2] = buffer[3];
     }
+
+    if (bytes_read == -1) {
+        perror("read in skip_http_headers");
+    } else { // bytes_read == 0
+        fprintf(stderr, "Connection closed before end of headers\n");
+    }
+    return -1;
 }
 
 void process_response(int client_socket) {
-    skip_http_headers(client_socket);
+    if (skip_http_headers(client_socket) == -1) {
+        return;
+    }
     
     fd_set set;
     char buffer[4096];
@@ -120,18 +129,32 @@ void process_response(int client_socket) {
     int buffer_pos = 0;
     
     int running = 1;
+    int connection_closed = 0;
+
     while (running) {
+        if (buffer_pos > 0) {
+            int remaining_data = bytes_in_buffer - buffer_pos;
+            if (remaining_data > 0) {
+                memmove(buffer, &buffer[buffer_pos], remaining_data);
+            }
+            bytes_in_buffer = remaining_data;
+            buffer_pos = 0;
+        }
+
         FD_ZERO(&set);
-        if (buffer_pos == bytes_in_buffer) {
-            FD_SET(client_socket, &set);
+        int space_available = sizeof(buffer) - bytes_in_buffer;
+        if (!connection_closed && space_available > 0) {
+            FD_SET(client_socket, &set); 
         }
         FD_SET(STDIN_FILENO, &set);
 
         struct timeval timeout = {0, 0};
         int ready = select(client_socket + 1, &set, NULL, NULL, (buffer_pos < bytes_in_buffer) ? &timeout : NULL);
+
         if (ready == -1) {
             perror("select");
             running = 0;
+            break;
         }
 
         if (FD_ISSET(STDIN_FILENO, &set)) {
@@ -149,15 +172,14 @@ void process_response(int client_socket) {
                 perror("read");
                 break;
             }
-            
         }
 
         if (FD_ISSET(client_socket, &set)) {
-            bytes_in_buffer = recv(client_socket, buffer, sizeof(buffer), 0);
-            buffer_pos = 0;
-            if (bytes_in_buffer <= 0) {
-                printf("Connection closed.\n");
-                break;
+            int bytes_read = recv(client_socket, &buffer[bytes_in_buffer], space_available, 0);
+            if (bytes_read <= 0) {
+                connection_closed = 1;
+            } else {
+                bytes_in_buffer += bytes_read;
             }
         }
 
@@ -179,6 +201,18 @@ void process_response(int client_socket) {
                 }
             }
         }
+        
+        if (connection_closed && buffer_pos == bytes_in_buffer) {
+            printf("\nConnection closed.\n");
+            running = 0;
+        }
+    }
+}
+
+void backup_termios() {
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &termios_orig) == -1) {
+        perror("tcsetattr");
+        exit(EXIT_FAILURE);
     }
 }
 
@@ -193,13 +227,6 @@ void change_termios() {
     termios_new.c_cc[VMIN] = 1;
     termios_new.c_cc[VTIME] = 0;
     if (tcsetattr(STDIN_FILENO, TCSANOW, &termios_new) == -1) {
-        perror("tcsetattr");
-        exit(EXIT_FAILURE);
-    }
-}
-
-void backup_termios() {
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &termios_orig) == -1) {
         perror("tcsetattr");
         exit(EXIT_FAILURE);
     }
