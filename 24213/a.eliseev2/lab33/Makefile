@@ -1,5 +1,6 @@
 CC = gcc
-LDFLAGS = -Wall -lsocket -lnsl
+LDLIBS = -lsocket -lnsl
+CFLAGS = -O2 -Wall
 
 proxy.out: proxy.c
-	$(LINK.c) proxy.c -o $@
+	$(LINK.c) -o $@ $(LDLIBS) $^
