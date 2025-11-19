@@ -11,7 +11,7 @@
 #include <termios.h>
 #include "jobs.h"
 #include "shell.h"
-#include "built_in_commands.h"
+#include "builtins.h"
 
 char *infile, *outfile, *appfile;
 struct command cmds[MAXCMDS];
@@ -28,25 +28,28 @@ void set_child_signals() {
     }
 }
 
-void build_job_prompt(int start_cmd, int end_cmd, char* prompt_buffer) {
+void build_job_prompt(int start_cmd, int end_cmd, char* prompt_buffer, size_t buflen) {
     *prompt_buffer = '\0';
 
     for (int k = start_cmd; k <= end_cmd; k++) {
         for (char** arg = cmds[k].cmdargs; *arg; arg++) {
-            strcat(prompt_buffer, *arg);
+            size_t left = buflen - strlen(prompt_buffer) - 1;
+            strncat(prompt_buffer, *arg, left);
 
             if (*(arg + 1) != NULL) {
-                strcat(prompt_buffer, " ");
+                left = buflen - strlen(prompt_buffer) - 1;
+                strncat(prompt_buffer, " ", left);
             }
         }
         if (k < end_cmd) {
-            strcat(prompt_buffer, " | ");
+            size_t left = buflen - strlen(prompt_buffer) - 1;
+            strncat(prompt_buffer, " | ", left);
         }
     }
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) { 
+
     for (int i = 0; i < count_signals; i++) {
         signal(signals[i], SIG_IGN);
     }
@@ -101,7 +104,7 @@ int main(int argc, char *argv[])
             int prev_pipe_read_end = -1;
             char job_prompt[1024];
 
-            build_job_prompt(i, j, job_prompt);
+            build_job_prompt(i, j, job_prompt, sizeof(job_prompt));
 
             for (int k = i; k <= j; k++) {
                 if (k < j) {
@@ -123,14 +126,23 @@ int main(int argc, char *argv[])
                         if (pgid == 0) {
                             pgid = getpid();
                         }
-                        setpgid(getpid(), pgid);
+
+                        if (setpgid(pid, pgid) == -1) {
+                            fprintf(stderr, "setpgid(%d, %d) failed: %s\n", pid, pgid, strerror(errno));
+                        }
 
                         if (k > i) {
-                            dup2(prev_pipe_read_end, STDIN_FILENO);
+                            if (dup2(prev_pipe_read_end, STDIN_FILENO) < 0) {
+                                perror("dup2 (stdin pipe) failed");
+                                exit(1);
+                            }
                             close(prev_pipe_read_end);
                         }
                         if (k < j) {
-                            dup2(pipefd[1], STDOUT_FILENO);
+                            if (dup2(pipefd[1], STDOUT_FILENO) < 0) {
+                                perror("dup2 (stdout pipe) failed");
+                                exit(1);
+                            }
                             close(pipefd[0]);
                             close(pipefd[1]);
                         }
@@ -142,8 +154,13 @@ int main(int argc, char *argv[])
                                 exit(1);
                             }
 
-                            dup2(fd, STDIN_FILENO);
-                            close(fd);
+                            if (dup2(fd, STDIN_FILENO) < 0) {
+                                perror("dup2 (infile) failed");
+                                exit(1);
+                            }
+                            if (close(fd) < 0) {
+                                perror("close");
+                            }
                         }
 
                         if ((outfile != NULL || appfile != NULL) && k == j) {
@@ -160,18 +177,23 @@ int main(int argc, char *argv[])
                                 exit(1);
                             }
 
-                            dup2(fd, STDOUT_FILENO);
+                            if (dup2(fd, STDOUT_FILENO) < 0) {
+                                perror("dup2 (outfile) failed");
+                                exit(1);
+                            }
                             close(fd);
                         }
 
                         execvp(cmds[k].cmdargs[0], cmds[k].cmdargs);
                         perror(cmds[k].cmdargs[0]);
-                        exit(1);
+                        exit(127);
                     default:
                         if (pgid == 0) {
                             pgid = pid;
                         }
-                        setpgid(pid, pgid);
+                        if (setpgid(pid, pgid) == -1) {
+                            fprintf(stderr, "setpgid(%d, %d) failed: %s\n", pid, pgid, strerror(errno));
+                        }
                         
                         char proc_prompt[256] = "";
 

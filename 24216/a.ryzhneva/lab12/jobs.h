@@ -31,6 +31,8 @@ struct Proc_t {
     char prompt[MAX_PROMPT_LEN];
 };
 
+void sigchld_handler(int sig);
+
 Job* create_job(int pgid, State state, char* prompt, Proc* procs);
 void print_job(Job* job);
 void print_all_jobs();

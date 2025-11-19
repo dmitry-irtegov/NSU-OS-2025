@@ -181,11 +181,13 @@ void state_update(Job* job) {
             case 0:
                 break;
             case -1:
-                if (errno != ECHILD) { 
+                if (errno == ECHILD) {
+                    current->state = DONE;
+                } else { 
                     perror("waitpid() failed");
-                    current->state = DONE; 
-                    break;
+                    current->state = DONE;
                 }
+                break;
             default:
                 if (WIFEXITED(status)) {
                     current->state = DONE;

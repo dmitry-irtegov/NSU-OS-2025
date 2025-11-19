@@ -2,9 +2,7 @@
 #include <ctype.h>
 #include <string.h>
 #include "shell.h"
-
 static char *blankskip(register char *);
-
 int parseline(char *line)
 {
     int nargs, ncmds;
@@ -13,8 +11,6 @@ int parseline(char *line)
     int rval;
     register int i;
     static char delim[] = " \t|&<>;\n";
-
-    /* initilize*/
     bkgrnd = nargs = ncmds = rval = 0;
     s = line;
     infile = outfile = appfile = (char *) NULL;
@@ -22,13 +18,12 @@ int parseline(char *line)
 
     for (i = 0; i < MAXCMDS; i++) {
         cmds[i].cmdflag = 0;
+        cmds[i].cmdargs[0] = NULL;
     }
 
-    while (*s) {  /* until line has been parsed */
-        s = blankskip(s); /*  skip white space */
-        if (!*s) break; /*  done with line */
-        
-        /*  handle <, >, |, &, and ;  */
+    while (*s) {
+        s = blankskip(s);
+        if (!*s) break;
         switch(*s) {
             case '&':
                 ++bkgrnd;
@@ -41,12 +36,10 @@ int parseline(char *line)
                 }
                 *s++ = '\0';
                 s = blankskip(s);
-
                 if (!*s) {
                     fprintf(stderr, "syntax error\n");
                     return(-1);
                 }
-
                 if (aflg) {
                     appfile = s;
                 }
@@ -54,30 +47,35 @@ int parseline(char *line)
                     outfile = s;
                 
                 s = strpbrk(s, delim);
-                if (isspace(*s))
+
+                if (s && isspace(*s)) {
                     *s++ = '\0';
+                } else if (s) {
+                    *s = '\0';
+                }
                 break;
             
             case '<':
                 *s++ = '\0';
                 s = blankskip(s);
-
                 if(!*s) {
                     fprintf(stderr, "syntax error\n");
                     return(-1);
                 }
-
                 infile = s;
                 s = strpbrk(s, delim);
-                if (isspace(*s))
+                
+                if (isspace(*s)) {
                     *s++ = '\0';
+                } else if (s) {
+                    *s = '\0';
+                }
                 break;
             case '|':
                 if (nargs == 0) {
                     fprintf(stderr, "syntax error\n");
                     return(-1);
                 }
-
                 cmds[ncmds++].cmdflag |= OUTPIP;
                 cmds[ncmds].cmdflag |= INPIP;
                 *s++ = '\0';
@@ -98,26 +96,45 @@ int parseline(char *line)
                 *s++ = '\0';
                 break;
             default:
-                /*  a command argument  */
-                if (nargs == 0) /* next command */
+                if (nargs >= MAXARGS - 1) { 
+                    fprintf(stderr, "too many arguments (>%d)\n", MAXARGS - 1);
+                    return(-1);
+                }
+
+                if (nargs == 0) {
+                    if (ncmds >= MAXCMDS - 1) {
+                        fprintf(stderr, "too many commands (>%d)\n", MAXCMDS - 1);
+                        return(-1);
+                    }
                     rval = ncmds+1;
+                }
+
                 cmds[ncmds].cmdargs[nargs++] = s;
                 cmds[ncmds].cmdargs[nargs] = (char *) NULL;
-                s = strpbrk(s, delim);
 
-                if (isspace(*s))
+                register char *arg_end = s;
+                while (*arg_end && !strchr(delim, *arg_end)) {
+                    if (*arg_end == '\\') {
+                        arg_end++;
+                        if (*arg_end == '\0') {
+                            fprintf(stderr, "syntax error\n");
+                            return -1;
+                        }
+                    }
+                    arg_end++;
+                }
+
+                s = arg_end;
+                
+                if (*s) {
                     *s++ = '\0';
+                }
+                
                 break;
         }
     }
-    /*  error check  */
-    /*
-        *  The only errors that will be checked for are
-        *  no command on the right side of a pipe
-        *  no command to the left of a pipe is checked above
-    */
 
-    if (cmds[ncmds-1].cmdflag & OUTPIP) {
+    if (ncmds > 0 && cmds[ncmds-1].cmdflag & OUTPIP) {
         if (nargs == 0) {
             fprintf(stderr, "syntax error\n");
             return(-1);

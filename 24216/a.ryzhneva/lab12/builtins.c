@@ -1,11 +1,11 @@
 #include <stdio.h>
-#include "shell.h"
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <termios.h>
-#include "jobs.h"
 #include <string.h>
+#include "jobs.h"
+#include "shell.h"
 
 extern struct termios shell_termios;
 

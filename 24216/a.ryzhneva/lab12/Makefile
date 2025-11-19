@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -g
 
-OBJS = shell.o parseline.o promptline.o jobs.o built_in_commands.o
+OBJS = shell.o parseline.o promptline.o jobs.o builtins.o
 TARGET = shell
 
 all: $(TARGET)
@@ -9,7 +9,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
 
-shell.o: shell.c shell.h jobs.h built_in_commands.h
+shell.o: shell.c shell.h jobs.h builtins.h
 	$(CC) $(CFLAGS) -c shell.c
 
 parseline.o: parseline.c shell.h
@@ -21,8 +21,11 @@ promptline.o: promptline.c shell.h
 jobs.o: jobs.c jobs.h shell.h
 	$(CC) $(CFLAGS) -c jobs.c
 
-built_in_commands.o: built_in_commands.c built_in_commands.h jobs.h shell.h
-	$(CC) $(CFLAGS) -c built_in_commands.c
+builtins.o: builtins.c builtins.h jobs.h shell.h
+	$(CC) $(CFLAGS) -c builtins.c
+
+# tokenizer.o: tokenizer.c tokenizer.h jobs.h shell.h
+# 	$(CC) $(CFLAGS) -c tokenizer.c
 
 clean:
 	rm -f $(OBJS) $(TARGET)
