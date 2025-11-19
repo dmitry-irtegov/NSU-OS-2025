@@ -96,16 +96,28 @@ int builtin_bg(struct command* cmd) {
     return 0;
 }
 
+int buildtin_cd(struct command* cmd) {
+    if (cmd->cmdargs[1] == NULL) {
+        fprintf(stderr, "cd: missing argument\n");
+        return -1;
+    }
+
+    if (chdir(cmd->cmdargs[1]) == -1) {
+        perror("cd");
+        return -1;
+    }
+
+    return 0;
+}
+
 typedef struct builtin_cmd {
     char* name;
     int (*func)(struct command*);
 } builtin_cmd_t;
 
-static builtin_cmd_t builtin_cmds[] = {{"exit", builtin_exit},
-                                       {"jobs", builtin_jobs},
-                                       {"fg", builtin_fg},
-                                       {"bg", builtin_bg},
-                                       {NULL, NULL}};
+static builtin_cmd_t builtin_cmds[] = {
+    {"exit", builtin_exit}, {"jobs", builtin_jobs}, {"fg", builtin_fg},
+    {"bg", builtin_bg},     {"cd", buildtin_cd},    {NULL, NULL}};
 
 int execute_builtin(struct command* cmd) {
     if (cmd == NULL || cmd->cmdargs[0] == NULL) {

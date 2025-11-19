@@ -15,8 +15,9 @@ char bkgrnd;
 int main(int argc, char* argv[]) {
     register int i;
     char line[MAXLINE]; /*  allow large command lines  */
+    char cwd[MAXLINE];
     int ncmds;
-    char prompt[50]; /* shell prompt */
+    char prompt[MAXLINE * 2]; /* shell prompt */
     pid_t child_pid = -1;
     char cmd_line[MAXLINE] = "";
 
@@ -33,9 +34,15 @@ int main(int argc, char* argv[]) {
 
     init_jobs();
 
-    sprintf(prompt, "[%s] ", argv[0]);
+    while (1) { /* until eof  */
 
-    while (promptline(prompt, line, sizeof(line)) > 0) { /* until eof  */
+        if (getcwd(cwd, sizeof(cwd)) != NULL) {
+            sprintf(prompt, "[%s:%s] ", argv[0], cwd);
+        } else {
+            sprintf(prompt, "[%s] ", argv[0]);
+        }
+
+        if (promptline(prompt, line, sizeof(line)) <= 0) break;
 
         cleanup_zombies();
 
