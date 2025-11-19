@@ -18,6 +18,10 @@ void handler_child(pid_t pgid, int ncmds, char* cmdline) {
         }
 
         if (WIFEXITED(status)) {
+            struct job* jb = get_job_by_pid(wpid);
+            if (jb != NULL) {
+                fprintf(stderr, "[%d]   Done       %s\n", jb->jid, jb->cmdline);
+            }
             delete_job(wpid);
 #ifdef DEBUG
             printf("Process %d exited with status %d\n", wpid,

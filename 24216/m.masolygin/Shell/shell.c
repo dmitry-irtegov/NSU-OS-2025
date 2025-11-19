@@ -121,6 +121,8 @@ int main(int argc, char* argv[]) {
         }
         close_all_pipes(pipes, ncmds);
 
+        cmd_line[0] = '\0';
+
         for (int k = 0; k < ncmds; k++) {
             for (int m = 0; cmds[k].cmdargs[m] != NULL; m++) {
                 strcat(cmd_line, cmds[k].cmdargs[m]);

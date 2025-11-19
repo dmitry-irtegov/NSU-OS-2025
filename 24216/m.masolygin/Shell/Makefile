@@ -16,8 +16,8 @@ $(TARGET): $(OBJS)
 %.o: %.c shell.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
-debug: CFLAGS += -DDEBUG
-debug: clean all
+debug: clean
+	$(MAKE) all CFLAGS="$(CFLAGS) -DDEBUG"
 
 clean:
 	rm -f $(OBJS) $(TARGET)
