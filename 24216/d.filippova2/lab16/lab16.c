@@ -22,15 +22,21 @@ int main(void) {
         return 1;
     }
 
+
     printf("Введите символ: ");
     fflush(stdout);
 
     ch = getchar();
-
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1) {
-        perror("tcsetattr");
+    if (ch == EOF) {
+        perror("getchar");
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
         return 1;
     }
+
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &oldt) == -1) {
+        perror("tcsetattr"); return 1; 
+    }
+
 
     printf("\nВы ввели: %c\n", ch);
 
