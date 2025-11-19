@@ -14,15 +14,13 @@ int execvpe(const char* file, char* const argv[], char* const envp[]) {
     return -1;
 };
 
-int main(int argc, char* argv[]) {
+int main() {
     int status;
     pid_t pid = fork();
-
+    char* argv[] = {"sh", "-c", "echo MY_VAR=$MY_VAR", NULL};
+    char* envp[] = {"MY_VAR=Hello_from_execvpe", "PATH=/bin:/usr/bin", NULL};
     switch (pid) {
         case 0:
-            char* argv[] = {"sh", "-c", "echo MY_VAR=$MY_VAR", NULL};
-            char* envp[] = {"MY_VAR=Hello_from_execvpe", "PATH=/bin:/usr/bin",
-                            NULL};
             execvpe("sh", argv, envp);
             perror("Error execvp");
             exit(1);
