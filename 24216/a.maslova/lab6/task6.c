@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #define BUFFER_SIZE 4096
 #define INIT_CAP 1000
@@ -106,42 +107,53 @@ int print_entire_file(int fd) {
 int process_input(int fd, LineTable *tab) {
     int num;
     char input[128];
-    
-    signal(SIGALRM, alarm_handler);
+
+    struct sigaction sa;
+    sa.sa_handler = alarm_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0; 
+    sigaction(SIGALRM, &sa, NULL);
+
     alarm(TIMEOUT);
 
     while (!timeout) {
 
         printf("Enter line number (0 to exit): ");
         fflush(stdout);
-        
+
         if (!fgets(input, sizeof(input), stdin)) {
-            alarm(0);
+            if (timeout) {
+                print_entire_file(fd);
+                return 0;
+            }
             return -1;
         }
+
         alarm(0);
 
         if (timeout) {
-            if (print_entire_file(fd) == -1) {
-                return -1;
-            }
+            print_entire_file(fd);
             return 0;
         }
 
-        if (sscanf(input, "%d", &num) != 1) continue;
-        if (num == 0) break;
-        if (num < 1 || num > tab->count) {
-            printf("Invalid line (1-%d)\n", tab->count);
+        if (sscanf(input, "%d", &num) != 1) {
+            alarm(TIMEOUT);
             continue;
         }
-        print_line(fd, &tab->lines[num - 1]);
+
+        if (num == 0) break;
+
+        if (num < 1 || num > tab->count) {
+            printf("Invalid line (1-%d)\n", tab->count);
+        } else {
+            print_line(fd, &tab->lines[num - 1]);
+        }
 
         alarm(TIMEOUT);
     }
-    
+
     return 0;
 }
-
 
 
 int main(int argc, char *argv[]) {
