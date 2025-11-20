@@ -41,15 +41,15 @@ int main() {
       return 1;
     }
     wait(NULL);
-    return 0;
-  } else {
+  }
+  else {
     // child
     if (close(fd[0])) {
       perror("Couldn't close end of pipe");
       return 1;
     }
     char msg[] =
-        "Hi! I'm your child and I want you to uppercase this message\n";
+      "Hi! I'm your child and I want you to uppercase this message\n";
     if (write(fd[1], msg, sizeof(msg)) == -1) {
       perror("Writing message into pipe was failed");
       return 1;
@@ -58,6 +58,6 @@ int main() {
       perror("Couldn't close end of pipe");
       return 1;
     }
-    return 0;
   }
+  return 0;
 }
