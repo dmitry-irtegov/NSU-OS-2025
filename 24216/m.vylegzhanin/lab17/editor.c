@@ -9,6 +9,18 @@
 #define CTRL_D 4
 #define CTRL_G 7
 #define CTRL_W 23
+#define KEY_ERASE 256
+#define KEY_KILL 257
+
+static int classify_input(unsigned char c, char erase_char, char kill_char) {
+    if (c == erase_char) {
+        return KEY_ERASE;
+    }
+    if (c == kill_char) {
+        return KEY_KILL;
+    }
+    return c;
+}
 
 int main() {
     struct termios old_term, new_term;
@@ -31,79 +43,94 @@ int main() {
     tcsetattr(STDIN_FILENO, TCSANOW, &new_term);
 
     while (read(STDIN_FILENO, &c, 1) == 1) {
-        if (c == CTRL_D && pos == 0) {
-            break;
-        }
-        
-        if (c == erase_char) {
-            if (pos > 0) {
-                pos--;
-                col--;
-                write(STDOUT_FILENO, "\b \b", 3);
-            }
-        }
-        else if (c == kill_char) {
-            while (pos > 0) {
-                pos--;
-                col--;
-                write(STDOUT_FILENO, "\b \b", 3);
-            }
-        }
-        else if (c == CTRL_W) {
-            while (pos > 0 && line[pos - 1] == ' ') {
-                pos--;
-                col--;
-                write(STDOUT_FILENO, "\b \b", 3);
-            }
-            while (pos > 0 && line[pos - 1] != ' ') {
-                pos--;
-                col--;
-                write(STDOUT_FILENO, "\b \b", 3);
-            }
-        }
-        else if (c == '\n') {
-            write(STDOUT_FILENO, "\n", 1);
-            pos = 0;
-            col = 0;
-        }
-        else if (isprint(c)) {
-            if (col >= MAX_LINE) {
-                int word_start = pos;
-                while (word_start > 0 && line[word_start - 1] != ' ') {
-                    word_start--;
+        int action = classify_input(c, erase_char, kill_char);
+
+        switch (action) {
+            case CTRL_D:
+                if (pos == 0) {
+                    goto exit_loop;
                 }
-                
-                if (word_start > 0 && pos > word_start) {
-                    int chars_to_move = pos - word_start;
-                    char word[MAX_LINE + 1];
-                    memcpy(word, &line[word_start], chars_to_move);
-                    
-                    for (int i = 0; i < chars_to_move; i++) {
-                        write(STDOUT_FILENO, "\b \b", 3);
-                    }
-                    
-                    write(STDOUT_FILENO, "\n", 1);
-                    
-                    memcpy(line, word, chars_to_move);
-                    pos = chars_to_move;
-                    col = chars_to_move;
-                    write(STDOUT_FILENO, word, chars_to_move);
-                } else {
-                    write(STDOUT_FILENO, "\n", 1);
-                    pos = 0;
-                    col = 0;
+                break;
+
+            case KEY_ERASE:
+                if (pos > 0) {
+                    pos--;
+                    col--;
+                    write(STDOUT_FILENO, "\b \b", 3);
                 }
+                continue;
+
+            case KEY_KILL:
+                while (pos > 0) {
+                    pos--;
+                    col--;
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+                continue;
+
+            case CTRL_W:
+                while (pos > 0 && line[pos - 1] == ' ') {
+                    pos--;
+                    col--;
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+                while (pos > 0 && line[pos - 1] != ' ') {
+                    pos--;
+                    col--;
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+                continue;
+
+            case '\n':
+                write(STDOUT_FILENO, "\n", 1);
+                pos = 0;
+                col = 0;
+                continue;
+
+            default:
+                if (!isprint(c)) {
+                    char bell = CTRL_G;
+                    write(STDOUT_FILENO, &bell, 1);
+                    continue;
+                }
+                break;
+        }
+
+        if (col >= MAX_LINE) {
+            int word_start = pos;
+            while (word_start > 0 && line[word_start - 1] != ' ') {
+                word_start--;
             }
-            
-            line[pos++] = c;
-            col++;
-            write(STDOUT_FILENO, &c, 1);
+
+            int should_wrap = (word_start > 0 && pos > word_start);
+            if (!should_wrap) {
+                write(STDOUT_FILENO, "\n", 1);
+                pos = 0;
+                col = 0;
+            } else {
+                int chars_to_move = pos - word_start;
+                char word[MAX_LINE + 1];
+                memcpy(word, &line[word_start], chars_to_move);
+
+                for (int i = 0; i < chars_to_move; i++) {
+                    write(STDOUT_FILENO, "\b \b", 3);
+                }
+
+                write(STDOUT_FILENO, "\n", 1);
+
+                memcpy(line, word, chars_to_move);
+                pos = chars_to_move;
+                col = chars_to_move;
+                write(STDOUT_FILENO, word, chars_to_move);
+            }
         }
-        else {
-            char bell = CTRL_G;
-            write(STDOUT_FILENO, &bell, 1);
-        }
+
+        line[pos++] = c;
+        col++;
+        write(STDOUT_FILENO, &c, 1);
     }
+
+exit_loop:
 
     write(STDOUT_FILENO, "\n", 1);
     tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
