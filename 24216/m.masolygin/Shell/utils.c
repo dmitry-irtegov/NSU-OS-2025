@@ -90,13 +90,16 @@ void cleanup_zombies() {
     pid_t pid;
     int status;
 
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
         struct job* jb = get_job_by_pid(pid);
         if (jb != NULL) {
             if (WIFEXITED(status) || WIFSIGNALED(status)) {
                 fprintf(stderr, "[%d] Done %d  %s\n", jb->jid, jb->pid,
                         jb->cmdline);
                 delete_job(pid);
+            } else if (WIFSTOPPED(status)) {
+                jb->state = STOPPED;
+                fprintf(stderr, "[%d]+ Stopped %s\n", jb->jid, jb->cmdline);
             }
         }
 #ifdef DEBUG
