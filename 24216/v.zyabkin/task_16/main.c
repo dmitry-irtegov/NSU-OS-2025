@@ -11,6 +11,7 @@ int main(){
     newt = oldt;
 
     newt.c_lflag &= ~(ICANON | ECHO);
+    newt.c_cc[VMIN] = 1;
 
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
