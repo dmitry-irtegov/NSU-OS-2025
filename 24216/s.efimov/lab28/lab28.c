@@ -18,7 +18,7 @@ int main() {
         fprintf(filePointer[0], "%d\n", rand() % 100);
     }
 
-    if (fclose(filePointer[0]) == EOF){
+    if (fclose(filePointer[0]) == -1){
         perror("failed close filePointer[0]");
         exit(EXIT_FAILURE);
     }
@@ -30,11 +30,6 @@ int main() {
         if (count % 10 == 0) {
             printf("\n");
         }
-    }
-
-    if (fclose(filePointer[1]) == EOF){
-        perror("failed close filePointer[1]");
-        exit(EXIT_FAILURE);
     }
 
     if (p2close(filePointer) == -1) {
