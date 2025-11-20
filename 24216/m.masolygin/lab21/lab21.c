@@ -3,12 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#define BEEP "\a"
 
 volatile sig_atomic_t counter = 0;
 volatile sig_atomic_t exit_flag = 0;
 
 void beep(int sig) {
-    write(STDOUT_FILENO, "\a", 1);
+    write(STDOUT_FILENO, BEEP, sizeof(BEEP) - 1);
     counter++;
 }
 
@@ -39,6 +40,6 @@ int main() {
     while (!exit_flag) {
         pause();
     }
-    printf("\nSignal received %d times", counter);
+    printf("\nSignal received %d times\n", counter);
     return 0;
 }
