@@ -1,35 +1,31 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <time.h>
-#include <libgen.h>
+#include <libgen.h> 
 
 int main() {
     FILE *fp[2]; 
-
-    if (p2open("sort -n", fp) == -1) {
-        perror("Error p2open");
-        return EXIT_FAILURE;
-    }
+    int i, num;
 
     srand(time(NULL));
 
-    for (int i = 0; i < 100; i++) {
+   
+    if (p2open("sort -n", fp) == -1) {
+        perror("Ошибка p2open");
+        exit(1);
+    }
 
-        fprintf(fp[0], "%d\n", rand() % 100);
+    for (i = 0; i < 100; i++) {
+        int r = rand() % 100; 
+        fprintf(fp[0], "%d\n", r);
     }
 
     fclose(fp[0]);
 
-    int number;
+
     int count = 0;
-
-    printf("Sorted list of random numbers:\n");
-
-
-    while (fscanf(fp[1], "%d", &number) != EOF) {
-
-        printf("%3d ", number);
+    while (fscanf(fp[1], "%d", &num) == 1) {
+        printf("%3d ", num); 
         count++;
 
         if (count % 10 == 0) {
@@ -37,11 +33,7 @@ int main() {
         }
     }
 
-    if (count % 10 != 0) {
-        printf("\n");
-    }
+    p2close(fp);
 
-    fclose(fp[1]);
-
-    return EXIT_SUCCESS;
+    return 0;
 }
