@@ -6,7 +6,6 @@
 
 int main(void) {
     pid_t child_pid = fork();
-    int status;
     pid_t wait_result;
 
     switch (child_pid) {
@@ -20,11 +19,8 @@ int main(void) {
             exit(EXIT_FAILURE);
 
         default:
-            wait_result = waitpid(child_pid, &status, 0);
+            wait_result = waitpid(child_pid, NULL, 0);
             switch (wait_result) {
-                case 0:
-                    break;
-
                 case -1:
                     perror("Сбой при ожидании завершения процесса");
                     exit(EXIT_FAILURE);
