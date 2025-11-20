@@ -2,20 +2,20 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
+#define SIG "\a"
 
 volatile sig_atomic_t count = 0;
+volatile sig_atomic_t quit_flag = 0;
 
 void handle_sigint(int sig) {
     (void)sig;
     count++;
-    write(STDOUT_FILENO, "\a", 1); 
+    write(STDOUT_FILENO, SIG, sizeof(SIG) - 1); 
 }
 
 void handle_sigquit(int sig) {
     (void)sig;
-
-    printf("\n count of Ctrl+C = %d .\n", count);
-    exit(EXIT_SUCCESS);
+    quit_flag = 1;
 }
 
 int main() {
@@ -29,9 +29,13 @@ int main() {
         return 1;
     }
 
-    while (1) {
-        pause();
+    printf("Program started. Ctrl+C to beep, Ctrl+\\ to quit.\n");
+
+    while (!quit_flag) {
+        pause(); 
     }
+
+    printf("\n count of Ctrl+C = %d .\n", count);
 
     return 0;
 }
