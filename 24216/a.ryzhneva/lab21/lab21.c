@@ -19,12 +19,12 @@ void handle_sigquit(int sig) {
 }
 
 int main() {
-    if (signal(SIGINT, handle_sigint) == SIG_ERR) {
+    if (sigset(SIGINT, handle_sigint) == SIG_ERR) {
         perror("Failed to install the SIGINT handle");
         return 1;
     }
 
-    if (signal(SIGQUIT, handle_sigquit) == SIG_ERR) {
+    if (sigset(SIGQUIT, handle_sigquit) == SIG_ERR) {
         perror("Failed to install the SIGQUIT handle");
         return 1;
     }
