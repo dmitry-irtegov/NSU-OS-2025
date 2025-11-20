@@ -1,5 +1,6 @@
 # Prerequisites
 *.d
+.vscode
 
 # Object files
 *.o
@@ -59,4 +60,4 @@ core
 core.*
 .nfs*
 .DS_Store
-.vscode
+.vscode/
