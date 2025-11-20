@@ -37,5 +37,10 @@ int main() {
         exit(EXIT_FAILURE);
     }
 
+    if (p2close(filePointer) == -1) {
+        perror("error p2close");
+        return EXIT_FAILURE;
+    }
+
     return EXIT_SUCCESS;
 }
