@@ -106,6 +106,10 @@ int buildtin_cd(struct command* cmd) {
         perror("cd");
         return -1;
     }
+    if (setenv("PWD", cmd->cmdargs[1], 1) == -1) {
+        perror("setenv");
+        return -1;
+    }
 
     return 0;
 }

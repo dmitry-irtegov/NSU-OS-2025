@@ -87,7 +87,20 @@ int parseline(char* line) {
                 /* Process argument which may have multiple quoted/unquoted
                  * parts */
                 while (*s && !strchr(delim, *s)) {
-                    if (*s == '"' || *s == '\'') {
+                    if (*s == '\\') {
+                        char* src = s + 1;
+                        char* dst = s;
+                        if (*src) {
+                            *dst++ = *src++;
+                            while (*src) {
+                                *dst++ = *src++;
+                            }
+                            *dst = '\0';
+                            s++;
+                        } else {
+                            *s = '\0';
+                        }
+                    } else if (*s == '"' || *s == '\'') {
                         char quote = *s;
                         /* Remove opening quote by shifting */
                         char* src = s + 1;
@@ -95,6 +108,7 @@ int parseline(char* line) {
                         while (*src && *src != quote) {
                             *dst++ = *src++;
                         }
+                        char* content_end = dst;
                         if (*src == quote) {
                             /* Skip closing quote */
                             src++;
@@ -105,6 +119,7 @@ int parseline(char* line) {
                         }
                         *dst = '\0';
                         /* s stays at same position to process next part */
+                        s = content_end;
                     } else {
                         s++;
                     }
