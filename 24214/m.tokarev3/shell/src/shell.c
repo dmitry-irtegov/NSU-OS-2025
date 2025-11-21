@@ -1,11 +1,11 @@
 #include "shell.h"
 
 struct command cmds[MAX_CMDS];
-char *infile = NULL;
-char *outfile = NULL;
-char *appfile = NULL;
 int bkgrnd = 0;
 int num_cmds = 0;
+
+char multi_commands[MAX_CMDS][MAX_LINE];
+int multi_command_count = 0;
 
 struct termios shell_tmodes;
 int shell_terminal;
@@ -88,8 +88,6 @@ int main(int argc, char **argv)
 
     while (1)
     {
-        check_jobs();
-
         print_prompt();
 
         if (fgets(line, MAX_LINE, stdin) == NULL)
@@ -108,6 +106,11 @@ int main(int argc, char **argv)
             }
         }
 
+        if (get_job_count() > 0)
+        {
+            check_jobs();
+        }
+
         num_cmds = parseline(line);
 
         if (num_cmds == -1)
@@ -118,6 +121,33 @@ int main(int argc, char **argv)
 
         if (num_cmds == 0)
         {
+            continue;
+        }
+
+        if (num_cmds == PARSE_MULTIPLE_COMMANDS)
+        {
+            for (int i = 0; i < multi_command_count; i++)
+            {
+                int result = parseline(multi_commands[i]);
+                if (result == -1)
+                {
+                    fprintf(stderr, "Parsing error\n");
+                    continue;
+                }
+                if (result == 0)
+                {
+                    continue;
+                }
+
+                if (is_builtin(cmds[0].cmdargs[0]))
+                {
+                    execute_builtin();
+                }
+                else
+                {
+                    execute_commands();
+                }
+            }
             continue;
         }
 

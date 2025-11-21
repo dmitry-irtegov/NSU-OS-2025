@@ -18,7 +18,15 @@ void execute_commands()
     int status;
     char command_line[MAX_LINE];
 
-    strcpy(command_line, cmds[0].cmdargs[0]);
+    // Строим полную строку команды
+    command_line[0] = '\0';
+    for (int i = 0; cmds[0].cmdargs[i] != NULL; i++)
+    {
+        if (i > 0)
+            strcat(command_line, " ");
+        strcat(command_line, cmds[0].cmdargs[i]);
+    }
+
     if (bkgrnd)
     {
         strcat(command_line, " &");
@@ -43,7 +51,7 @@ void execute_commands()
         signal(SIGTTIN, SIG_DFL);
         signal(SIGTTOU, SIG_DFL);
 
-        setup_redirections();
+        setup_redirections(&cmds[0]);
 
         execvp(cmds[0].cmdargs[0], cmds[0].cmdargs);
         perror(cmds[0].cmdargs[0]);
@@ -92,38 +100,38 @@ void execute_commands()
     }
 }
 
-void setup_redirections()
+void setup_redirections(command_t *cmd)
 {
-    if (infile)
+    if (cmd->infile)
     {
-        int fd = open(infile, O_RDONLY);
+        int fd = open(cmd->infile, O_RDONLY);
         if (fd < 0)
         {
-            perror(infile);
+            perror(cmd->infile);
             exit(1);
         }
         dup2(fd, STDIN_FILENO);
         close(fd);
     }
 
-    if (outfile)
+    if (cmd->outfile)
     {
-        int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        int fd = open(cmd->outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd < 0)
         {
-            perror(outfile);
+            perror(cmd->outfile);
             exit(1);
         }
         dup2(fd, STDOUT_FILENO);
         close(fd);
     }
 
-    if (appfile)
+    if (cmd->appfile)
     {
-        int fd = open(appfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        int fd = open(cmd->appfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
         if (fd < 0)
         {
-            perror(appfile);
+            perror(cmd->appfile);
             exit(1);
         }
         dup2(fd, STDOUT_FILENO);
@@ -172,6 +180,20 @@ void execute_pipeline()
                 dup2(pipes[i][1], STDOUT_FILENO);
             }
 
+            command_t temp_cmd = cmds[i];
+
+            if (i > 0)
+            {
+                temp_cmd.infile = NULL;
+            }
+            if (i < num_cmds - 1)
+            {
+                temp_cmd.outfile = NULL;
+                temp_cmd.appfile = NULL;
+            }
+
+            setup_redirections(&temp_cmd);
+
             for (int j = 0; j < num_cmds - 1; j++)
             {
                 close(pipes[j][0]);
@@ -201,14 +223,26 @@ void execute_pipeline()
         close(pipes[i][1]);
     }
 
-    // Передаем управление терминалом группе процессов pipeline
     if (!bkgrnd && shell_is_interactive)
     {
         tcsetpgrp(shell_terminal, pgid);
     }
 
     char command_line[MAX_LINE];
-    strcpy(command_line, cmds[0].cmdargs[0]);
+    command_line[0] = '\0';
+
+    for (int i = 0; i < num_cmds; i++)
+    {
+        if (i > 0)
+            strcat(command_line, " | ");
+        for (int j = 0; cmds[i].cmdargs[j] != NULL; j++)
+        {
+            if (j > 0)
+                strcat(command_line, " ");
+            strcat(command_line, cmds[i].cmdargs[j]);
+        }
+    }
+
     if (bkgrnd)
     {
         strcat(command_line, " &");

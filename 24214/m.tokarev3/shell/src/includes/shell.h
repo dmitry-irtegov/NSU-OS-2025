@@ -22,6 +22,8 @@
 #define MAX_CMDS 100
 #define MAX_JOBS 100
 
+#define PARSE_MULTIPLE_COMMANDS -2
+
 typedef enum
 {
     JOB_RUNNING,
@@ -43,17 +45,19 @@ typedef struct
 typedef struct command
 {
     char *cmdargs[MAX_ARGS];
+    char *infile;
+    char *outfile;
+    char *appfile;
 } command_t;
 
 extern command_t cmds[MAX_CMDS];
 
-extern char *infile;
-extern char *outfile;
-extern char *appfile;
-
 extern int bkgrnd;
 
 extern int num_cmds;
+
+extern char multi_commands[MAX_CMDS][MAX_LINE];
+extern int multi_command_count;
 
 // Terminal management
 extern struct termios shell_tmodes;
@@ -64,10 +68,11 @@ extern pid_t foreground_pgid;
 
 // parseline.c
 int parseline(char *line);
+int split_command_sequence(char *line, char commands[][MAX_LINE], int max_commands);
 
 // execute.c
 void execute_commands();
-void setup_redirections();
+void setup_redirections(command_t *cmd);
 void execute_pipeline();
 
 // shell.c

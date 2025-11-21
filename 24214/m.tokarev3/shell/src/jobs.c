@@ -234,6 +234,8 @@ void print_jobs()
         return;
     }
 
+    check_jobs();
+
     for (int i = 0; i < job_count; i++)
     {
         const char *status_str;
@@ -252,6 +254,9 @@ void print_jobs()
             status_str = "Unknown";
             break;
         }
+
+        char display_command[MAX_LINE];
+        strcpy(display_command, jobs[i].command);
 
         printf("[%d] %s\t\t%s (pgid %d)\n",
                jobs[i].job_id,
