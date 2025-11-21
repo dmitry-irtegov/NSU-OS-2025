@@ -22,11 +22,11 @@ int main() {
         }
     }
 
-    // if (fclose(fp[0]) == EOF) {
-    //     perror("fclose");
-    //     p2close(fp);
-    //     return 1;
-    // }
+    if (fclose(fp[0]) == EOF) {
+        perror("fclose");
+        p2close(fp);
+        return 1;
+    }
 
     int number, count = 0;
     while (fscanf(fp[1], "%d", &number) != EOF) {
