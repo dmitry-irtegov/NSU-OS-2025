@@ -81,6 +81,11 @@ void carry_word(char *line, int *pos) {
 }
 
 int main() {
+    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
+        fprintf(stderr, "Please launch from terminal");
+        exit(-1);
+    }
+
     char line[MAX_LINE_LENGTH + 1] = {0};
     int pos = 0;
     int return_val = 0;
