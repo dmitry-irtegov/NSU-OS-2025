@@ -39,6 +39,9 @@ int main() {
     fd_set set;
     fd_set read_set;    
     int fd_max = client_socket;
+    int active_fds[1024];
+    int active_count = 1;
+    active_fds[0] = client_socket;
 
     FD_ZERO(&set);
     FD_ZERO(&read_set);
@@ -53,7 +56,8 @@ int main() {
             break;
         }
 
-        for (int i = 0; i <= fd_max; i++) {
+        for (int idx = 0; idx < active_count; idx++) {
+            int i = active_fds[idx];
             if (FD_ISSET(i, &read_set)) {
                 if (i == client_socket) {
                     int new_socket = accept(client_socket, NULL, NULL);
@@ -63,6 +67,9 @@ int main() {
                         FD_SET(new_socket, &set);
                         if (new_socket > fd_max) {
                             fd_max = new_socket;
+                        }
+                        if (active_count < 1024) {
+                            active_fds[active_count++] = new_socket;
                         }
                         printf("New client connected (FD: %d)\n", new_socket);
                     }
@@ -76,6 +83,11 @@ int main() {
                         }
                         close(i);
                         FD_CLR(i, &set);
+                        for (int j = idx; j < active_count - 1; j++) {
+                            active_fds[j] = active_fds[j + 1];
+                        }
+                        active_count--;
+                        idx--;
                     } else {
                         for (int j = 0; j < bytes_read; j++) {
                             buffer[j] = toupper((unsigned char)buffer[j]);
