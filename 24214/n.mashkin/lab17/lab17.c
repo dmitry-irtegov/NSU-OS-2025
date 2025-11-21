@@ -35,7 +35,7 @@ void set_terminal(int old) {
 }
 
 int is_printable(char c) {
-    return (c >= 32 && c <= 126);
+    return (c >= 32 && c != 127);
 }
 
 int is_whitespace(char c) {
@@ -81,6 +81,11 @@ void carry_word(char *line, int *pos) {
 }
 
 int main() {
+    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) {
+        fprintf(stderr, "Please launch from terminal");
+        exit(-1);
+    }
+
     char line[MAX_LINE_LENGTH + 1] = {0};
     int pos = 0;
     int return_val = 0;
