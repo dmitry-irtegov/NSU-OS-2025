@@ -36,6 +36,11 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
 
+            if (pipeline.flags & PLBKGRND) {
+                fdprintf(1, "Launched BG job. pid: %ld\n", (long)pid);
+                continue;
+            }
+
             siginfo_t info;
             if (waitid(P_PID, pid, &info, WEXITED)) {
                 perror("Could not wait for child to exit");
