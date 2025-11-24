@@ -1,6 +1,7 @@
 #include "io.h"
 #include "parse.h"
 #include <fcntl.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <wait.h>
@@ -23,6 +24,28 @@ int main(int argc, char *argv[]) {
 
         char *ptr = line;
         while (!is_error && parse_pipeline(&ptr, &pipeline)) {
+            pid_t pid = fork();
+            if (pid == -1) {
+                perror("Could not fork a new process");
+                is_error = 1;
+                break;
+            }
+            if (pid == 0) {
+                execvp(pipeline.commands[0].args[0], pipeline.commands[0].args);
+                perror("Could not execute");
+                return 1;
+            }
+
+            siginfo_t info;
+            if (waitid(P_PID, pid, &info, WEXITED)) {
+                perror("Could not wait for child to exit");
+                is_error = 1;
+                break;
+            }
+            if (restore_terminal(0, &new_attr)) {
+                is_error = 1;
+                break;
+            }
         }
     }
     if (restore_terminal(0, &old_attr)) {
