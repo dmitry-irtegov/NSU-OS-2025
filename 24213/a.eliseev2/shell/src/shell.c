@@ -31,6 +31,30 @@ int main(int argc, char *argv[]) {
                 break;
             }
             if (pid == 0) {
+                if (pipeline.in_file) {
+                    int fd = open(pipeline.in_file, O_RDONLY);
+                    if (fd == -1) {
+                        perror("Could not open file for reading");
+                        return 1;
+                    }
+                    if (dup2(fd, 0) == -1) {
+                        perror("Could not set stdin");
+                        return 1;
+                    }
+                }
+                if (pipeline.out_file) {
+                    int flags = O_WRONLY | O_CREAT;
+                    flags |= pipeline.flags & PLAPPEND ? O_APPEND : O_TRUNC;
+                    int fd = open(pipeline.out_file, flags, 0666);
+                    if (fd == -1) {
+                        perror("Could not open file for writing");
+                        return 1;
+                    }
+                    if (dup2(fd, 1) == -1) {
+                        perror("Could not set stdout");
+                        return 1;
+                    }
+                }
                 execvp(pipeline.commands[0].args[0], pipeline.commands[0].args);
                 perror("Could not execute");
                 return 1;
