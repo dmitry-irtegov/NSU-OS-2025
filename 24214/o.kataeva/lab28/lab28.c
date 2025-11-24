@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <libgen.h>
 
 int main(void) {
     FILE *pipes[2];
@@ -10,7 +11,7 @@ int main(void) {
     srand((unsigned)time(NULL));
 
     if (p2open("sort -n", pipes) < 0) {
-        fprintf(stderr, "p2open");
+        perror("p2open");
         return 1;
     }
 
