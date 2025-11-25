@@ -14,10 +14,7 @@ func TryToOpenFile(name string) {
 		fmt.Println(err)
 		return
 	}
-	err = file.Close()
-	if err != nil {
-		fmt.Println(err)
-	}
+	_ = file.Close()
 }
 
 func main() {
@@ -27,7 +24,7 @@ func main() {
 	err := syscall.Setuid(syscall.Getuid())
 	if err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(1)
 	}
 
 	fmt.Println("RUID: ", syscall.Getuid(), "EUID: ", syscall.Geteuid())
