@@ -1,26 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
 
 const (
-	socketPath = "/tmp/ex.sock"
+	unixSocketFile = "/tmp/ex.sock"
+	textMessage    = "Golang Aura"
 )
 
 func main() {
+	fmt.Println("=== Unix Socket Client ===")
+	fmt.Printf("Connecting to: %s\n", unixSocketFile)
 
-	message := "Golang Aura"
-	conn, err := net.Dial("unix", socketPath)
+	connection, err := net.Dial("unix", unixSocketFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Connection failed:", err)
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
-	_, err = conn.Write([]byte(message))
+	defer connection.Close()
+
+	fmt.Println("Connected successfully!")
+	fmt.Printf("Sending message: %s\n", textMessage)
+
+	bytesWritten, err := connection.Write([]byte(textMessage))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Write error:", err)
 	}
+
+	fmt.Printf("Sent %d bytes\n", bytesWritten)
+	fmt.Println("Message delivered!")
 }

@@ -10,36 +10,39 @@ import (
 )
 
 const (
-	socketPath    = "/tmp/ex.sock"
-	maxLenMessage = 2048
+	unixSocketFile = "/tmp/ex.sock"
+	messageBuffer  = 2048
 )
 
 func main() {
+	os.Remove(unixSocketFile)
 
-	_ = os.Remove(socketPath)
+	fmt.Printf("Listening on: %s\n", unixSocketFile)
 
-	server, err := net.Listen("unix", socketPath)
+	listener, err := net.Listen("unix", unixSocketFile)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Listen error:", err)
 	}
-	defer func() {
-		_ = server.Close()
-	}()
+	defer listener.Close()
 
-	conn, err := server.Accept()
+	fmt.Println("Waiting for connection...")
+
+	connection, err := listener.Accept()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("Accept error:", err)
 	}
-	defer func() {
-		_ = conn.Close()
-	}()
+	defer connection.Close()
 
-	buf := make([]byte, maxLenMessage)
-	n, err := conn.Read(buf)
+	fmt.Println("Client connected!")
+
+	buffer := make([]byte, messageBuffer)
+	bytesRead, err := connection.Read(buffer)
 	if err != nil && err != io.EOF {
-		log.Fatal(err)
+		log.Fatal("Read error:", err)
 	}
-	data := buf[:n]
-	newStr := strings.ToUpper(string(data))
-	fmt.Println("toUpper message: ", newStr)
+
+	receivedData := buffer[:bytesRead]
+	upperCaseText := strings.ToUpper(string(receivedData))
+
+	fmt.Printf("Uppercase: %s\n", upperCaseText)
 }
