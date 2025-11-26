@@ -6,7 +6,7 @@
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Использование: %s <команда> [аргументы...]\n", argv[0]);
+        fprintf(stderr, "использование: %s <команда> [аргументы...]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
