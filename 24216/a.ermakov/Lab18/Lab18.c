@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 
         char *name = basename(argv[i]);
 
-        printf("%c%s %3lu %-8s %-8s ",
+        printf("%c%s %3u %-8s %-8s ",
                filetype(st.st_mode),
                perms,
                st.st_nlink,
