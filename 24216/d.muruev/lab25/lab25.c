@@ -6,7 +6,7 @@
 #include <sys/wait.h>
 
 
-#define BUFFER_SIZE 64
+#define BUFFER_SIZE 12
 
 int main() {
     int fd[2];
