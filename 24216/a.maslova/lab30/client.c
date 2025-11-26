@@ -5,72 +5,39 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define SOCKET_PATH "/tmp/case_converter_socket"
-#define BUFFER_SIZE 1024
-
-int create_client_socket() {
-    int sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (sockfd == -1) {
-        return -1;
-    }
-    
-    struct sockaddr_un server_addr;
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sun_family = AF_UNIX;
-    strncpy(server_addr.sun_path, SOCKET_PATH, sizeof(server_addr.sun_path) - 1);
-    
-    if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1) {
-        close(sockfd);
-        return -1;
-    }
-    
-    return sockfd;
-}
-
-int send_data_to_server(int sockfd) {
-    char buffer[BUFFER_SIZE];
-    ssize_t bytes_read;
-    
-    while ((bytes_read = read(STDIN_FILENO, buffer, BUFFER_SIZE)) > 0) {
-        if (write(sockfd, buffer, bytes_read) == -1) {
-            return -1;
-        }
-    }
-
-    if (bytes_read == -1) {
-        return -1;
-    }
-
-    return 0;
-}
-
-void cleanup_client(int sockfd) {
-    if (sockfd != -1) {
-        close(sockfd);
-    }
-}
+#define SOCKET_PATH "/tmp/my_socket"
 
 int main() {
-    int sockfd = -1;
-    
-    sockfd = create_client_socket();
-    if (sockfd == -1) {
-        perror("Error connecting to server");
-        cleanup_client(sockfd);
-        return 1;
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd == -1) { 
+        perror("socket"); 
+        exit(EXIT_FAILURE); 
     }
-    
-    printf("Подключено к серверу. Введите текст (Ctrl+D для завершения):\n");
-    
-    if (send_data_to_server(sockfd) == -1) {
-        perror("Error sending data to server");
-        cleanup_client(sockfd);
-        return 1;
-    };
-    
-    printf("Соединение закрыто\n");
-    
-    cleanup_client(sockfd);
-    
+
+    struct sockaddr_un addr = {0};
+    addr.sun_family = AF_UNIX;
+    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
+
+    if (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
+        perror("connect");
+        close(fd);
+        exit(EXIT_FAILURE);
+    }
+
+    char buf[1024];
+    ssize_t n;
+
+    while ((n = read(STDIN_FILENO, buf, sizeof(buf))) > 0) {
+        if (write(fd, buf, n) == -1) {
+            perror("write to socket");
+            break;
+        }
+    }
+     
+    if (n == -1) {
+        perror("read from stdin");
+    }
+
+    close(fd);
     return 0;
 }
