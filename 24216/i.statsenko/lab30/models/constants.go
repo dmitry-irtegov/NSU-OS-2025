@@ -1,6 +1,8 @@
 package models
 
-
-const SocketAddress = "/tmp/server.sock"
-const MaxLenMessage = 2048
-const ExitFailure = 1
+const (
+	SocketAddress = "/tmp/server.sock"
+	SizeBuffer    = 2048
+	MaxLenMessage = 65536
+	ExitFailure   = 1
+)
