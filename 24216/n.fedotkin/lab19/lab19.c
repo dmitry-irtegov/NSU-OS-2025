@@ -26,7 +26,7 @@ int scan_directory(const char *pattern) {
     DIR *dir = opendir(".");
     if (!dir) {
         perror("opendir");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     struct dirent *entry;
@@ -42,7 +42,7 @@ int scan_directory(const char *pattern) {
     if (errno) {
         perror("readdir");
         closedir(dir);
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     closedir(dir);
@@ -62,9 +62,14 @@ int main(int argc, char *argv[]) {
 
     int result = scan_directory(argv[1]);
 
-    if (!result) {
-        printf("%s\n", argv[1]);
-    }
+    switch (result) {
+        case -1:
+            exit(EXIT_FAILURE);
 
-    exit(EXIT_SUCCESS);
+        case  0:
+            printf("%s\n", argv[1]);
+        
+        default:
+            exit(EXIT_SUCCESS);
+    }
 }
