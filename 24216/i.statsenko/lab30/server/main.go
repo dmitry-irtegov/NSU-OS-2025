@@ -20,7 +20,7 @@ func main() {
 	server, err := net.Listen("unix", models.SocketAddress)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(models.ExitFailure)
+		return
 	}
 	defer func() {
 		_ = server.Close()
