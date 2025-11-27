@@ -23,18 +23,19 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s <command> [args...]\n", argv[0]);
         return 1;
     }
+    
+    char *env[] = {
+        "Course=second",
+        "USER=student", 
+        "PATH=/bin:/usr/bin",
+        NULL
+    };
 
     int status;
     pid_t pid = fork();
     
     switch (pid) {
         case 0:
-            char *env[] = {
-                "Course=second",
-                "USER=student", 
-                "PATH=/bin:/usr/bin",
-                NULL
-            };
             execvpe(argv[1], &argv[1], env);
             perror("execvpe failed");
             exit(1);
