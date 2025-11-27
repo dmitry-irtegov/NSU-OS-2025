@@ -36,7 +36,7 @@ int search_dir(const char *dirpath, const char *pattern) {
     DIR *dir;
     if ((dir = opendir(dirpath)) == NULL) {
         perror("Error: opendir");
-        exit(EXIT_FAILURE);
+        return -1;
     }
 
     struct dirent *entry;
@@ -49,13 +49,13 @@ int search_dir(const char *dirpath, const char *pattern) {
 
         if (snprintf(path, sizeof(path), "%s/%s", dirpath, entry->d_name) >= (int)sizeof(path)) {
             fprintf(stderr, "Path too long: %s/%s\n", dirpath, entry->d_name);
-            exit(EXIT_FAILURE);
+            return -1;
         }
 
         struct stat st;
         if (stat(path, &st) == -1) {
             perror("Error stating file");
-            exit(EXIT_FAILURE);
+            return -1;
         }
         
         process_entry(path, pattern, &found);
@@ -70,7 +70,7 @@ int search_dir(const char *dirpath, const char *pattern) {
     if (errno) {
         perror("Error: readdir");
         closedir(dir);
-        exit(EXIT_FAILURE);
+        return - 1;
     }
 
     closedir(dir);
@@ -86,8 +86,17 @@ int main(int argc, char *argv[]) {
     int result = search_dir(".", argv[1]);
     
 
-    if (!result)
-        printf("%s\n", argv[1]);
+    switch (result) {
+        case -1:
+            exit(EXIT_FAILURE);
+
+        case  0:
+            printf("%s\n", argv[1]);
+            exit(EXIT_SUCCESS);
+
+        default:
+            exit(EXIT_SUCCESS);
+    }
 
     exit(EXIT_SUCCESS);
 }
