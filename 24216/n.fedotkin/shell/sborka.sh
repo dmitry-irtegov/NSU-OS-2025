@@ -1,0 +1,17 @@
+gcc \
+    src/core/main.c \
+    src/core/shell.c \
+    src/parser/parseline.c \
+    src/execution/command.c \
+    src/execution/pipeline.c \
+    src/parser/task_manager.c \
+    src/io/readline.c \
+    src/execution/launcher.c \
+    src/execution/process.c \
+    src/scheduler/task.c \
+    src/scheduler/task_list.c \
+    src/core/error_handler.c \
+    -Iinclude \
+    -Wall \
+    -Wextra \
+    -o shell
