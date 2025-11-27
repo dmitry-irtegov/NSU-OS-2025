@@ -1,16 +1,21 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"os/signal"
 	"server/models"
 	"strings"
+	"syscall"
 )
 
 func main() {
 	_ = os.Remove(models.SocketAddress)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 
 	server, err := net.Listen("unix", models.SocketAddress)
 	if err != nil {
@@ -19,10 +24,20 @@ func main() {
 	}
 	defer func() {
 		_ = server.Close()
+		_ = os.Remove(models.SocketAddress)
 	}()
+	go run(server)
+	<-quit
+	fmt.Println("Graceful shutdown")
+}
+
+func run(server net.Listener) {
 	for {
 		conn, err := server.Accept()
-		if err != nil {
+		switch {
+		case errors.Is(err, net.ErrClosed):
+			return
+		case err != nil:
 			fmt.Println(err)
 			continue
 		}
@@ -36,7 +51,7 @@ func main() {
 
 func handleConnection(conn net.Conn) error {
 	buf := make([]byte, models.SizeBuffer)
-	result := make([]byte, 0)
+	result := make([]rune, 0)
 	readed := 0
 	for readed < models.MaxLenMessage {
 		n, err := conn.Read(buf)
@@ -46,15 +61,17 @@ func handleConnection(conn net.Conn) error {
 		if err != nil {
 			return err
 		}
-		if readed+n > models.MaxLenMessage {
-			n = models.MaxLenMessage - readed
+		data := []rune(string(buf[:n]))
+		countSymbols := len(data)
+		if readed+countSymbols > models.MaxLenMessage {
+			countSymbols = models.MaxLenMessage - readed
 		}
-		readed += n
-		result = append(result, buf[:n]...)
+		result = append(result, data[:countSymbols]...)
+		readed += countSymbols
 	}
 	newStr := strings.ToUpper(string(result))
 	if readed == models.MaxLenMessage {
-		fmt.Printf("toUpper first %d bytes: %s\n", models.MaxLenMessage, newStr)
+		fmt.Printf("toUpper first %d symbols: %s\n", models.MaxLenMessage, newStr)
 	} else {
 		fmt.Printf("toUpper message: %s\n", newStr)
 	}
