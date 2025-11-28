@@ -8,7 +8,7 @@
 
 struct table_entry_t {
   off_t offset;
-  size_t len;
+  off_t len;
 };
 
 using table_t = std::vector<table_entry_t>;
@@ -45,8 +45,7 @@ int main(int argc, char *argv[]) {
     for (off_t i = 0; i < (off_t)read_bytes; i++) {
       curr_off++;
       if (buff[i] == '\n') {
-        table.emplace_back(
-            table_entry_t{prev_off + 1, (size_t)(curr_off - prev_off)});
+        table.emplace_back(table_entry_t{prev_off + 1, (curr_off - prev_off)});
         prev_off = curr_off;
       }
     }
