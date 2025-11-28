@@ -12,12 +12,12 @@
 #include "protocol.h"
 
 #define BUF_SIZE 4096
-#define MAX_CLIENTS 255
+#define MAX_TARGETS 255
 
 #define CMD_OPEN  0x01
 #define CMD_CLOSE 0x02
 
-int clients[MAX_CLIENTS];
+int targets[MAX_TARGETS];
 
 struct Parser tunnel_parser;
 
@@ -98,37 +98,37 @@ void packet_received(int packet_id, const char *data, int len, int tunnel_fd) {
         int target_id = (unsigned char)data[1];
 
         if (cmd == CMD_OPEN) {
-            if (clients[target_id] != -1) {
-                close(clients[target_id]);
+            if (targets[target_id] != -1) {
+                close(targets[target_id]);
             }
 
             int target_fd = connect_to_target(g_target_host, g_target_port);
             if (target_fd >= 0) {
-                clients[target_id] = target_fd;
+                targets[target_id] = target_fd;
                 printf("Opened connection to target for client ID %d\n", target_id);
             } else {
                 send_command(tunnel_fd, target_id, CMD_CLOSE);
             }
         } else if (cmd == CMD_CLOSE) {
-            if (clients[target_id] != -1) {
-                close(clients[target_id]);
-                clients[target_id] = -1;
+            if (targets[target_id] != -1) {
+                close(targets[target_id]);
+                targets[target_id] = -1;
                 printf("Closed connection for client %d\n", target_id);
             }
         }
     } else {
-        if (packet_id > 0 && packet_id < MAX_CLIENTS && clients[packet_id] != -1) {
-            write(clients[packet_id], data, len);
+        if (packet_id > 0 && packet_id < MAX_TARGETS && targets[packet_id] != -1) {
+            write(targets[packet_id], data, len);
         }
     }
 }
 
 void handle_target_data(int id, int tunnel_fd) {
     char buf[BUF_SIZE];
-    int bytes_read = read(clients[id], buf, BUF_SIZE);
+    int bytes_read = read(targets[id], buf, BUF_SIZE);
     if (bytes_read <= 0) {
-        close(clients[id]);
-        clients[id] = -1;
+        close(targets[id]);
+        targets[id] = -1;
         send_command(tunnel_fd, id, CMD_CLOSE);
         return;
     }
@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
     parser_init(&tunnel_parser);
 
     for (int i = 0 ; i < 255; i++) {
-        clients[i] = -1;
+        targets[i] = -1;
     }
 
     int listen_fd = setup_server(listen_port);
@@ -192,10 +192,10 @@ int main(int argc, char *argv[]) {
         FD_SET(tunnel_fd, &main_set);
         int fd_max = tunnel_fd;
 
-        for (int i = 1; i < MAX_CLIENTS; i++) {
-            if (clients[i] != -1) {
-                FD_SET(clients[i], &main_set);
-                if (clients[i] > fd_max) fd_max = clients[i];
+        for (int i = 1; i < MAX_TARGETS; i++) {
+            if (targets[i] != -1) {
+                FD_SET(targets[i], &main_set);
+                if (targets[i] > fd_max) fd_max = targets[i];
             }
         }
 
@@ -208,8 +208,8 @@ int main(int argc, char *argv[]) {
             handle_tunnel_data(tunnel_fd);
         }
 
-        for (int i = 1; i < MAX_CLIENTS; i++) {
-            if (clients[i] != -1 && FD_ISSET(clients[i], &main_set)) {
+        for (int i = 1; i < MAX_TARGETS; i++) {
+            if (targets[i] != -1 && FD_ISSET(targets[i], &main_set)) {
                 handle_target_data(i, tunnel_fd);
             }
         }        
