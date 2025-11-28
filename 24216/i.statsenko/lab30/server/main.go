@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -20,7 +19,7 @@ func main() {
 	server, err := net.Listen("unix", models.SocketAddress)
 	if err != nil {
 		fmt.Println(err)
-		return
+		os.Exit(models.ExitFailure)
 	}
 	defer func() {
 		_ = server.Close()
@@ -34,10 +33,10 @@ func main() {
 func run(server net.Listener) {
 	for {
 		conn, err := server.Accept()
-		switch {
-		case errors.Is(err, net.ErrClosed):
-			return
-		case err != nil:
+		if err != nil {
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				return
+			}
 			fmt.Println(err)
 			continue
 		}
