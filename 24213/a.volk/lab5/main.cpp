@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     (void)printf("enter line no.:\n");
 
     if (scanf("%lu", &lineno) == EOF) {
-      perror("failed to read input");
+      perror("failed to read input or EOF reached");
       return false;
     }
 
