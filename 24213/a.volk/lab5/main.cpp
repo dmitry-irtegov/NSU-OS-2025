@@ -13,7 +13,14 @@ struct table_entry_t {
 
 using table_t = std::vector<table_entry_t>;
 
-int main() {
+void usage(char *invoke_path) { printf("%s <text file>\n", invoke_path); }
+
+int main(int argc, char *argv[]) {
+
+  if (argc != 2) {
+    usage(argv[0]);
+    return -1;
+  }
 
   int fd = open("text.txt", O_RDONLY);
   if (fd == -1) {
