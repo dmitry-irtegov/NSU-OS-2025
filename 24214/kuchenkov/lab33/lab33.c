@@ -184,6 +184,10 @@ int main(int argc, char *argv[]) {
     int target_port = atoi(argv[3]);
 
     listen_fd = setup_server(listen_port);
+    if (listen_fd < 0) {
+        fprintf(stderr, "Failed to set up server on port %d\n", listen_port);
+        return 1;
+    }
     printf("Proxy listening on port %d, forwarding to %s:%d\n", listen_port, target_host, target_port);
 
     FD_ZERO(&main_set);
@@ -200,6 +204,8 @@ int main(int argc, char *argv[]) {
 
         for (int i = 0; i <= fd_max; i++) {
             if (!FD_ISSET(i, &read_set)) continue;
+
+            if (i != listen_fd && tunnel[i] == -1) continue;
             
             if (i == listen_fd) {
                 accept_new_client(target_host, target_port);
