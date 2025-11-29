@@ -9,6 +9,7 @@
 #include <netdb.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/poll.h>
 
 /*
 33. Прокси-сервер
@@ -30,12 +31,57 @@
 */
 
 #define BUF_SIZE 4096
-#define MAX_FD FD_SETSIZE
+#define MAX_CONNECTIONS 1024
 
-fd_set main_set;
+struct pollfd fds[MAX_CONNECTIONS];
+int partners[MAX_CONNECTIONS];
+int count_fds = 0;
+
 int listen_fd;
-int fd_max;
-int tunnel[MAX_FD];
+
+void add_socket(int fd, int partner_fd) {
+    if (count_fds >= MAX_CONNECTIONS) {
+        return;
+    }
+    fds[count_fds].fd = fd;
+    fds[count_fds].events = POLLIN;
+    fds[count_fds].revents = 0;
+    partners[count_fds] = partner_fd;
+    count_fds++;
+}
+
+void remove_socket_at_index(int index) {
+    if (index < 0 || index >= count_fds) {
+        return;
+    }
+    close(fds[index].fd);
+    fds[index] = fds[count_fds-1];
+    partners[index] = partners[count_fds-1];
+    count_fds--;
+}
+
+int find_index_by_fd(int fd) {
+    for (int i = 0; i < count_fds; i++) {
+        if (fds[i].fd == fd) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int close_pair(int fd1, int fd2) {
+    int index_1 = find_index_by_fd(fd1);
+    if (index_1 != -1) {
+        remove_socket_at_index(index_1);
+    }
+    
+    int index_2 = find_index_by_fd(fd2);
+    if (index_2 != -1) {
+        remove_socket_at_index(index_2);
+    }
+    
+    return 1;
+}
 
 int connect_to_target(char *host, int port) {    
     struct hostent *hostent = gethostbyname(host);
@@ -88,7 +134,7 @@ int setup_server(int port) {
         return -1;
     }
 
-    if (listen(sock, 10) < 0) {
+    if (listen(sock, 1024) < 0) {
         perror("listen");
         return -1;
     }
@@ -109,72 +155,37 @@ void accept_new_client(const char *target_host, int target_port) {
         return;
     }
 
-    if (client_socket < MAX_FD && target_socket < MAX_FD) {
-        tunnel[client_socket] = target_socket;
-        tunnel[target_socket] = client_socket;
-
-        FD_SET(client_socket, &main_set);
-        FD_SET(target_socket, &main_set);
-        
-        if (client_socket > fd_max) {
-            fd_max = client_socket;
-        }
-        if (target_socket > fd_max) {
-            fd_max = target_socket;
-        }
-
+    if (count_fds + 2 <= MAX_CONNECTIONS) {
+        add_socket(client_socket, target_socket);
+        add_socket(target_socket, client_socket);
         printf("New tunnel: Client(%d) <-> Target(%d)\n", client_socket, target_socket);
     } else {
-        fprintf(stderr, "Too many connections\n");
+        printf("Too many active connections. Dropping.\n");
         close(client_socket);
         close(target_socket);
     }
 }
 
-void close_tunnel(int fd) {
-    int target_fd = tunnel[fd];
-    
-    close(fd);
-    FD_CLR(fd, &main_set);
-    tunnel[fd] = -1;
-
-    if (target_fd != -1) {
-        close(target_fd);
-        FD_CLR(target_fd, &main_set);
-        tunnel[target_fd] = -1;
-    }
-}
-
-void forward_data(int fd) {
+int forward_data(int source_fd, int dest_fd) {
     char buf[BUF_SIZE];
-    int bytes_read = read(fd, buf, BUF_SIZE);
-    int target_fd = tunnel[fd];
+    int bytes_read = read(source_fd, buf, BUF_SIZE);
 
     if (bytes_read <= 0) {
-        if (bytes_read == 0) {
-            printf("Socket %d hung up\n", fd);
-        } else {
-            perror("read");
-        }
-        close_tunnel(fd);
-    } else {
-        if (target_fd != -1) {
-            if (send(target_fd, buf, bytes_read, 0) == -1) {
-                perror("send");
-                close_tunnel(fd);
-            }
+        return close_pair(source_fd, dest_fd);
+    }    
+    if (dest_fd != -1) {
+        if (send(dest_fd, buf, bytes_read, 0) == -1) {
+            return close_pair(source_fd, dest_fd);
         }
     }
+
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
     if (argc != 4) {
         fprintf(stderr, "Usage: %s <listen_port> <target_host> <target_port>\n", argv[0]);
         return 1;
-    }
-
-    for (int i = 0; i < 1024; i++) {
-        tunnel[i] = -1;
     }
 
     signal(SIGPIPE, SIG_IGN);
@@ -188,29 +199,27 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Failed to set up server on port %d\n", listen_port);
         return 1;
     }
+
+    add_socket(listen_fd, -1);
+
     printf("Proxy listening on port %d, forwarding to %s:%d\n", listen_port, target_host, target_port);
 
-    FD_ZERO(&main_set);
-    FD_SET(listen_fd, &main_set);
-    fd_max = listen_fd;
-
     while (1) {
-        fd_set read_set = main_set;
-
-        if (select(fd_max + 1, &read_set, NULL, NULL, NULL) == -1) {
-            perror("select");
+        if (poll(fds, count_fds, -1) < 0) {
+            perror("poll");
             break;
         }
-
-        for (int i = 0; i <= fd_max; i++) {
-            if (!FD_ISSET(i, &read_set)) continue;
-
-            if (i != listen_fd && tunnel[i] == -1) continue;
-            
-            if (i == listen_fd) {
-                accept_new_client(target_host, target_port);
-            } else {
-                forward_data(i);
+        for (int i = 0; i < count_fds; i++) {
+            if (fds[i].revents & (POLLIN | POLLHUP | POLLERR)) {
+                int fd = fds[i].fd;
+                if (fd == listen_fd) {
+                    accept_new_client(target_host, target_port);
+                } else {
+                    int partner = partners[i];
+                    if (forward_data(fd, partner)) {
+                        i--; 
+                    }
+                }
             }
         }
     }
