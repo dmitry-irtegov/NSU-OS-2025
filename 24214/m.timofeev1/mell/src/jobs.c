@@ -6,6 +6,7 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <termios.h>
+#include <errno.h>
 #include "shell.h"
 
 struct job jobs[MAXJOBS];
@@ -56,10 +57,13 @@ void sigchld_handler(int sig)
 {
 	pid_t pid;
 	int status;
+	int saved_errno = errno;
 
 	while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED)) > 0)
 	{
-		int job_idx = find_job(pid);
+		pid_t pgid = getpgid(pid);
+		int job_idx = find_job(pgid);
+
 		if (job_idx >= 0)
 		{
 			if (WIFEXITED(status) || WIFSIGNALED(status))
@@ -69,7 +73,6 @@ void sigchld_handler(int sig)
 			else if (WIFSTOPPED(status))
 			{
 				jobs[job_idx].state = JOB_STOPPED;
-				fprintf(stderr, "[%d] Stopped %s\n", pid, jobs[job_idx].cmdline);
 			}
 			else if (WIFCONTINUED(status))
 			{
@@ -77,6 +80,8 @@ void sigchld_handler(int sig)
 			}
 		}
 	}
+
+	errno = saved_errno;
 }
 
 void update_job_state(int job_idx, int state)

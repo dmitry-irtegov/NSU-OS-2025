@@ -21,6 +21,11 @@ int execute_pipeline(int ncmds, char *cmdline)
 	int pipes[MAXCMDS][2];
 	pid_t pgid = 0;
 	pid_t pids[MAXCMDS];
+	sigset_t mask, oldmask;
+
+	sigemptyset(&mask);
+	sigaddset(&mask, SIGCHLD);
+	sigprocmask(SIG_BLOCK, &mask, &oldmask);
 
 	for (i = 0; i < ncmds - 1; i++)
 	{
@@ -85,6 +90,7 @@ int execute_pipeline(int ncmds, char *cmdline)
 				if (WIFSTOPPED(status))
 				{
 					stopped = 1;
+					break;
 				}
 			}
 		}
@@ -92,7 +98,7 @@ int execute_pipeline(int ncmds, char *cmdline)
 		if (shell_is_interactive)
 		{
 			tcsetpgrp(shell_terminal, shell_pgid);
-			tcgetattr(shell_terminal, &shell_tmodes);
+			tcsetattr(shell_terminal, TCSADRAIN, &shell_tmodes);
 		}
 
 		int job_idx = find_job(pgid);
@@ -111,11 +117,15 @@ int execute_pipeline(int ncmds, char *cmdline)
 				update_job_state(job_idx, JOB_DONE);
 			}
 		}
+
+		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 	}
 	else
 	{
 		printf("[%d]\n", pgid);
 		add_job(pgid, JOB_RUNNING, cmdline);
+
+		sigprocmask(SIG_SETMASK, &oldmask, NULL);
 	}
 
 	return 0;
