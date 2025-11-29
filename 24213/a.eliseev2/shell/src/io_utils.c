@@ -26,6 +26,7 @@ int setup_terminal(int fd, struct termios *old, struct termios *new) {
     }
     *old = *new;
     new->c_lflag |= ICANON;
+    new->c_lflag &= ~ECHOCTL;
     new->c_iflag |= IMAXBEL;
     if (tcsetattr(fd, TCSAFLUSH, new)) {
         perror("Could not set terminal attributes");
