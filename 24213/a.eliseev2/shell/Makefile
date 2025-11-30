@@ -10,7 +10,9 @@ SOURCES = \
 	io_utils.c \
 	prompt.c \
 	parse.c \
-	launch.c
+	launch.c \
+	jobs.c \
+	builtins.c
 
 OBJECTS = $(SOURCES:%.c=$(BUILD_DIR)/%.o)
 DEPS = $(SOURCES:%.c=$(BUILD_DIR)/%.d)

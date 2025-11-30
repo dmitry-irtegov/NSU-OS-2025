@@ -1,10 +1,8 @@
 #ifndef __PIPELINE_H
 #define __PIPELINE_H
 
+#include "shell_limits.h"
 #include <sys/types.h>
-
-#define MAXCMD 50
-#define MAXARGS 256
 
 typedef struct {
     char *args[MAXARGS];
@@ -24,6 +22,5 @@ typedef struct {
 } pipeline_t;
 
 int parse_pipeline(char **line_ptr, pipeline_t *pipeline);
-pid_t launch_pipeline(pipeline_t *pipeline);
 
 #endif // __PIPELINE_H

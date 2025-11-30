@@ -3,12 +3,13 @@
 
 #include <termios.h>
 
-#define RD_BUF_SIZE 4096
+int check_terminal(int fd);
 
-int setup_terminal(int fd, struct termios *old, struct termios *new);
-int restore_terminal(int fd, struct termios *old);
+int setup_terminal(int fd, struct termios *old);
+int save_terminal(int fd, struct termios *attrs);
+int restore_terminal(int fd, struct termios *attrs);
 
-int fdprintf(int fd, const char *format, ...);
+int set_foreground(int fd, pid_t pgid);
 
 int prompt_line(char *buffer, int len, char *is_eof);
 

@@ -1,4 +1,6 @@
 #include "io.h"
+#include <libgen.h>
+#include <limits.h>
 #include <netdb.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -7,13 +9,21 @@
 
 static void print_prompt() {
     char *login = getlogin();
-    char hostname[MAXHOSTNAMELEN + 1];
+
+    static char hostname[MAXHOSTNAMELEN + 1];
     int hostname_res = gethostname(hostname, sizeof(hostname));
     hostname[MAXHOSTNAMELEN] = 0;
+
+    static char cwd[PATH_MAX];
+    if (!getcwd(cwd, sizeof(cwd))) {
+        cwd[0] = 0;
+    }
+    char *dir_name = basename(cwd);
+
     if (login && !hostname_res) {
-        fdprintf(1, "[%s@%s]> ", login, hostname);
+        fprintf(stdout, "[%s@%s %s]> ", login, hostname, dir_name);
     } else {
-        fdprintf(1, "> ");
+        fprintf(stdout, "[%s]> ", dir_name);
     }
 }
 

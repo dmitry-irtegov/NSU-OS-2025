@@ -3,41 +3,49 @@
 #include <stdio.h>
 #include <unistd.h>
 
-int fdprintf(int fd, const char *format, ...) {
-    va_list args;
-    va_start(args, format);
-    int count = vsnprintf(NULL, 0, format, args);
-    va_end(args);
-    char buffer[count + 1];
-    va_start(args, format);
-    vsprintf(buffer, format, args);
-    va_end(args);
-    return write(fd, buffer, count);
-}
-
-int setup_terminal(int fd, struct termios *old, struct termios *new) {
+int check_terminal(int fd) {
     if (!isatty(fd)) {
         fprintf(stderr, "Only terminal input is supported.\n");
         return 1;
     }
-    if (tcgetattr(fd, new)) {
+    return 0;
+}
+
+int setup_terminal(int fd, struct termios *old) {
+    if (tcgetattr(fd, old)) {
         perror("Could not get terminal attributes");
         return 1;
     }
-    *old = *new;
-    new->c_lflag |= ICANON;
-    new->c_lflag &= ~ECHOCTL;
-    new->c_iflag |= IMAXBEL;
-    if (tcsetattr(fd, TCSAFLUSH, new)) {
+    struct termios new = *old;
+    new.c_lflag |= ICANON;
+    new.c_lflag &= ~ECHOCTL;
+    new.c_iflag |= IMAXBEL;
+    if (tcsetattr(fd, TCSAFLUSH, &new)) {
         perror("Could not set terminal attributes");
         return 1;
     }
     return 0;
 }
 
-int restore_terminal(int fd, struct termios *old) {
-    if (tcsetattr(fd, TCSAFLUSH, old)) {
+int save_terminal(int fd, struct termios *attr) {
+    if (tcgetattr(fd, attr)) {
+        perror("Could not save terminal attributes");
+        return 1;
+    }
+    return 0;
+}
+
+int restore_terminal(int fd, struct termios *attr) {
+    if (tcsetattr(fd, TCSAFLUSH, attr)) {
         perror("Could not restore terminal attributes");
+        return 1;
+    }
+    return 0;
+}
+
+int set_foreground(int fd, pid_t pgid) {
+    if (tcsetpgrp(0, pgid)) {
+        perror("Could not set foreground process group");
         return 1;
     }
     return 0;

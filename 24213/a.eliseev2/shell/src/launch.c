@@ -1,4 +1,5 @@
 #include "io.h"
+#include "jobs.h"
 #include "pipeline.h"
 #include <fcntl.h>
 #include <signal.h>
@@ -12,8 +13,7 @@ static void setup_and_exec(pipeline_t *pipeline) {
         return;
     }
     if (!(pipeline->flags & PLBKGRND)) {
-        if (tcsetpgrp(0, getpgrp())) {
-            perror("Could not set foreground process group");
+        if (set_foreground(0, getpgrp())) {
             return;
         }
     }
@@ -52,30 +52,47 @@ static void setup_and_exec(pipeline_t *pipeline) {
     return;
 }
 
-pid_t launch_pipeline(pipeline_t *pipeline) {
+int launch_job(pipeline_t *pipeline, job_t *job) {
+    struct termios term_attr;
+    if (save_terminal(0, &term_attr)) {
+        return 1;
+    }
+
     pid_t pid = fork();
     if (pid == -1) {
         perror("Could not fork a new process");
-        return -1;
+        return 1;
     }
     if (pid == 0) {
         setup_and_exec(pipeline);
         exit(1);
     }
-    if (pipeline->flags & PLBKGRND) {
-        fdprintf(1, "Launched BG job. pid: %ld\n", (long)pid);
-    }
 
     // There is an unavoidable (without IPC) race condition:
-    // - If we call setpgid in just the child process, the parent may beat the child 
-    // and try to wait before the child calls setpgid, resulting in an error.
-    // - If we call setpgid in just the parent process, the child may beat the parent 
-    // and call exec. The call to setpgid in the parent process would then result in an error.
-    // 
+    // - If we call setpgid in just the child process, the parent may beat the
+    // child and try to wait before the child calls setpgid, resulting in an
+    // error.
+    // - If we call setpgid in just the parent process, the child may beat the
+    // parent and call exec. The call to setpgid in the parent process would
+    // then result in an error.
+    //
     // This is why we call setpgid in both processes.
     //
-    // We ignore the result of this call because it may fail if the child manages to beat the parent.
-    // Any other errors should be handled by the child.
+    // We ignore the result of this call because it may fail if the child
+    // manages to beat the parent. Any other errors should be handled by the
+    // child.
     setpgid(pid, pid);
-    return pid;
+
+    *job = (job_t){
+        .procs[0] =
+            (proc_t){
+                .pid = pid,
+                .state = PROC_RUNNING,
+            },
+        .count = 1,
+        .pgid = pid,
+        .state = PROC_RUNNING,
+        .term_attr = term_attr,
+    };
+    return 0;
 }
