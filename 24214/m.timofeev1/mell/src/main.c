@@ -52,13 +52,39 @@ int main(int argc, char *argv[])
 
 		if ((ncmds = parseline(line)) <= 0)
 			continue;
-		if (is_builtin(cmds[0].cmdargs[0]))
-		{
-			execute_builtin(cmds[0].cmdargs[0], cmds[0].cmdargs);
-			continue;
-		}
 
-		execute_pipeline(ncmds, line);
+		int cmd_start = 0;
+		for (int i = 0; i < ncmds; i++)
+		{
+			int is_last = (i == ncmds - 1);
+			int is_pipeline_end = is_last || !(cmds[i].cmdflag & OUTPIP);
+
+			if (is_pipeline_end)
+			{
+				int pipeline_len = i - cmd_start + 1;
+
+				if (is_builtin(cmds[cmd_start].cmdargs[0]))
+				{
+					execute_builtin(cmds[cmd_start].cmdargs[0], cmds[cmd_start].cmdargs);
+				}
+				else
+				{
+					struct command saved_cmds[MAXCMDS];
+					memcpy(saved_cmds, cmds, sizeof(cmds));
+
+					for (int j = 0; j < pipeline_len; j++)
+					{
+						cmds[j] = saved_cmds[cmd_start + j];
+					}
+
+					execute_pipeline(pipeline_len, line);
+
+					memcpy(cmds, saved_cmds, sizeof(cmds));
+				}
+
+				cmd_start = i + 1;
+			}
+		}
 	}
 
 	if (has_running_jobs())
