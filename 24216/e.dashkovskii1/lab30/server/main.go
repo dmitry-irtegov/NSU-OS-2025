@@ -25,24 +25,37 @@ func main() {
 	}
 	defer listener.Close()
 
-	fmt.Println("Waiting for connection...")
+	fmt.Println("Waiting for connections...")
+	clientNumber := 0
 
-	connection, err := listener.Accept()
-	if err != nil {
-		log.Fatal("Accept error:", err)
+	for {
+		connection, err := listener.Accept()
+		if err != nil {
+			log.Printf("Accept error: %v\n", err)
+			continue
+		}
+
+		clientNumber++
+		go handleClient(connection, clientNumber)
 	}
+}
+
+func handleClient(connection net.Conn, clientID int) {
 	defer connection.Close()
 
-	fmt.Println("Client connected!")
+	fmt.Printf("[Client #%d] Connected\n", clientID)
 
 	buffer := make([]byte, messageBuffer)
 	bytesRead, err := connection.Read(buffer)
 	if err != nil && err != io.EOF {
-		log.Fatal("Read error:", err)
+		log.Printf("[Client #%d] Read error: %v\n", clientID, err)
+		return
 	}
 
 	receivedData := buffer[:bytesRead]
 	upperCaseText := strings.ToUpper(string(receivedData))
 
-	fmt.Printf("Uppercase: %s\n", upperCaseText)
+	fmt.Printf("[Client #%d] Received: %s\n", clientID, string(receivedData))
+	fmt.Printf("[Client #%d] Uppercase: %s\n", clientID, upperCaseText)
+	fmt.Printf("[Client #%d] Disconnected\n", clientID)
 }
