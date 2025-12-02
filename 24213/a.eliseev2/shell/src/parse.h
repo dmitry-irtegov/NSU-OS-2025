@@ -2,6 +2,7 @@
 #define __PIPELINE_H
 
 #include "shell_limits.h"
+
 #include <sys/types.h>
 
 typedef struct {
@@ -21,6 +22,18 @@ typedef struct {
     plflag_t flags;
 } pipeline_t;
 
-int parse_pipeline(char **line_ptr, pipeline_t *pipeline);
+typedef struct {
+    char *string;
+    char *point;
+} parser_t;
+
+inline static parser_t make_parser(char *string) {
+    return (parser_t){
+        .string = string,
+        .point = string,
+    };
+}
+
+int parse_pipeline(parser_t *parser, pipeline_t *pipeline);
 
 #endif // __PIPELINE_H

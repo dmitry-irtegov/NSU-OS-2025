@@ -1,47 +1,40 @@
 #include "builtins.h"
 #include "io.h"
 #include "jobs.h"
-#include "pipeline.h"
-#include "shell_limits.h"
+#include "parse.h"
+
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <wait.h>
 
 int main(int argc, char *argv[]) {
 
-
-    signal(SIGINT, SIG_IGN);  /* To ignore ^C */
-    signal(SIGQUIT, SIG_IGN); /* To ignore ^\ */
-    signal(SIGTSTP, SIG_IGN); /* To ignore ^Z */
-    signal(SIGTTOU, SIG_IGN); /* To call tcsetpgrp from background */
-
     if (check_terminal(0)) {
         return 1;
     }
 
     static joblist_t jobs;
-    struct termios old_attr;
-    char is_eof = 0, is_error = 0;
-    char line[MAXLINE];
-
-    if (setup_terminal(0, &old_attr)) {
-        is_error = 1;
-    }
+    char *line = NULL;
+    char is_error = 0;
+    
+    signal(SIGINT, SIG_IGN);  /* To ignore ^C */
+    signal(SIGQUIT, SIG_IGN); /* To ignore ^\ */
+    signal(SIGTSTP, SIG_IGN); /* To ignore ^Z */
+    signal(SIGTTOU, SIG_IGN); /* To call tcsetpgrp from background */
+    
+    prompt_init();
     init_jobs(&jobs);
     setbuf(stdout, NULL);
 
-    while (!is_error && !is_eof && prompt_line(line, sizeof(line), &is_eof)) {
-        if (restore_terminal(0, &old_attr)) {
-            is_error = 1;
-            continue;
-        }
-
-        char *ptr = line;
+    while (!is_error && (line = prompt_line(line))) {
+        parser_t parser = make_parser(line);
         static pipeline_t pipeline;
-        while (!is_error && parse_pipeline(&ptr, &pipeline)) {
+
+        while (!is_error && parse_pipeline(&parser, &pipeline)) {
             if (try_builtin(&pipeline, &jobs, &is_error)) {
                 continue;
             }
@@ -59,19 +52,13 @@ int main(int argc, char *argv[]) {
             add_job(&jobs, &job, pipeline.flags & PLBKGRND);
         }
 
-        if (setup_terminal(0, &old_attr)) {
-            is_error = 1;
-            continue;
-        }
-
         if (!is_error && wait_background(&jobs)) {
             is_error = 1;
             continue;
         }
     }
 
-    if (restore_terminal(0, &old_attr)) {
-        is_error = 1;
-    }
-    return !is_eof || is_error;
+    free(line);
+
+    return is_error;
 }

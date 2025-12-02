@@ -2,7 +2,7 @@
 #define __BUILTINS_H
 
 #include "jobs.h"
-#include "pipeline.h"
+#include "parse.h"
 
 int try_builtin(pipeline_t *pipeline, joblist_t *jobs, char *is_error);
 

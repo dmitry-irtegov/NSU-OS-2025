@@ -1,135 +1,88 @@
 #include "io.h"
+
 #include <libgen.h>
 #include <limits.h>
 #include <netdb.h>
-#include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/param.h>
 #include <unistd.h>
 
-static void print_prompt() {
-    char *login = getlogin();
+#include <readline/history.h>
+#include <readline/readline.h>
 
-    static char hostname[MAXHOSTNAMELEN + 1];
-    int hostname_res = gethostname(hostname, sizeof(hostname));
-    hostname[MAXHOSTNAMELEN] = 0;
+static char login[LOGIN_NAME_MAX];
+static char hostname[MAXHOSTNAMELEN + 1];
+static char prompt_char;
+static char cwd[PATH_MAX];
+static char *dir_name = cwd;
 
-    static char cwd[PATH_MAX];
+static int on_newline(int count, int key) {
+    if (rl_end == 0 || rl_line_buffer[rl_end - 1] != '\\') {
+        printf("\n");
+        rl_done = 1;
+        return 0;
+    }
+    rl_point = rl_end;
+    rl_insert_text("\n");
+    rl_line_buffer[rl_end - 1] = '\n';
+    return 0;
+}
+
+void prompt_init() {
+    prompt_char = geteuid() == 0 ? '#' : '$';
+    if (getlogin_r(login, sizeof(login))) {
+        perror("Could not get login");
+        login[0] = 0;
+    }
+    if (gethostname(hostname, sizeof(hostname))) {
+        hostname[0] = 0;
+    }
+
+    rl_bind_key('\r', on_newline);
+    rl_bind_key('\n', on_newline);
+}
+
+static void update_cwd() {
     if (!getcwd(cwd, sizeof(cwd))) {
         cwd[0] = 0;
     }
-    char *dir_name = basename(cwd);
+    dir_name = basename(cwd);
+}
 
-    if (login && !hostname_res) {
-        fprintf(stdout, "[%s@%s %s]> ", login, hostname, dir_name);
+static int make_prompt(char *buffer, int buf_len) {
+    if (login[0] && hostname[0] && dir_name[0]) {
+        return snprintf(buffer, buf_len, "[%s@%s %s]%c ", login, hostname,
+                        dir_name, prompt_char);
     } else {
-        fprintf(stdout, "[%s]> ", dir_name);
+        return snprintf(buffer, buf_len, "shell%c ", prompt_char);
     }
 }
 
-static int discard_rest(char *buffer, int buffer_size, char carry_bslash,
-                        char *is_eof) {
-    while (1) {
-        int read_count = read(0, buffer, buffer_size - 1);
-        switch (read_count) {
-        case -1:
-            perror("A read error ocurred");
-            return 1;
-        case 0:
-            *is_eof = 1;
+static int is_blank(const char *string) {
+    if (!string) {
+        return 1;
+    }
+    for (const char *ch = string; *ch; ch++) {
+        if (!isspace(*ch)) {
             return 0;
-        case 1:
-            if (carry_bslash) {
-                carry_bslash = 0;
-                continue;
-            }
-            if (buffer[0] == '\n') {
-                return 0;
-            }
-        default:
-            carry_bslash = 0;
-            if (buffer[read_count - 1] == '\n' &&
-                buffer[read_count - 2] != '\\') {
-                return 0;
-            }
-            if (buffer[read_count - 1] == '\\') {
-                carry_bslash = 1;
-            }
-            break;
         }
     }
+    return 1;
 }
 
-static int read_line(char *buffer, int buffer_size, char *is_eof) {
-    int line_length = 0;
-    while (1) {
-        int read_count =
-            read(0, buffer + line_length, buffer_size - line_length - 1);
-        if (read_count == -1) {
-            perror("A read error ocurred");
-            return -1;
-        }
-        line_length += read_count;
-        buffer[line_length] = '\0';
+char *prompt_line(char *prev) {
+    free(prev);
 
-        if (!read_count) {
-            // EOF
-            *is_eof = 1;
-            break;
-        }
+    update_cwd();
+    int count = make_prompt(NULL, 0);
+    char prompt[count + 1];
+    make_prompt(prompt, sizeof(prompt));
 
-        if (line_length >= 2 && buffer[line_length - 2] == '\\' &&
-            buffer[line_length - 1] == '\n') {
-            // Line should be continued
-            buffer[line_length - 2] = ' ';
-            buffer[line_length - 1] = '\0';
-            line_length -= 1;
-            continue;
-        }
-
-        if (line_length >= 1 && buffer[line_length - 1] == '\n') {
-            // Success
-            break;
-        }
-
-        if (line_length == buffer_size - 1) {
-            // Buffer overflow
-            break;
-        }
-    }
-    return line_length;
-}
-
-int prompt_line(char *buffer, int buffer_size, char *is_eof) {
-    if (buffer_size == 0) {
-        return 0;
+    char *line = readline(prompt);
+    if (!is_blank(line)) {
+        add_history(line);
     }
 
-    while (1) {
-        if (*is_eof) {
-            return 0;
-        }
-
-        print_prompt();
-
-        int length = read_line(buffer, buffer_size, is_eof);
-        if (length <= 0) {
-            // Error or immediate EOF
-            return 0;
-        }
-        if (buffer[length - 1] == '\n' || *is_eof) {
-            // Success
-            return 1;
-        }
-
-        // The line is too long to fit into the buffer, discard the rest.
-        char carry_bslash = buffer[length - 1] == '\\';
-        int discard_result =
-            discard_rest(buffer, buffer_size, carry_bslash, is_eof);
-        fprintf(stderr, "Line too long!\n");
-
-        if (discard_result) {
-            return 0;
-        }
-    }
+    return line;
 }

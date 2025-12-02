@@ -1,8 +1,9 @@
 #ifndef __JOBS_H
 #define __JOBS_H
 
-#include "pipeline.h"
+#include "parse.h"
 #include "shell_limits.h"
+
 #include <sys/types.h>
 #include <termios.h>
 
@@ -11,7 +12,7 @@ typedef enum {
     PROC_STOPPED = 1,
     PROC_EXITED = 2,
     PROC_KILLED = 4,
-    
+
     PROC_ANYDEAD = PROC_EXITED | PROC_KILLED,
 } pstate_t;
 

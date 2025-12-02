@@ -1,10 +1,13 @@
 #include "io.h"
 #include "jobs.h"
-#include "pipeline.h"
+#include "parse.h"
+
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 static int try_close(int fd) {
@@ -47,7 +50,8 @@ static void setup_and_exec(command_t *command, pid_t pgid, int fd_in,
         return;
     }
     execvp(command->args[0], command->args);
-    perror("Could not execute");
+    fprintf(stderr, "Could not execute %s: %s\n", command->args[0],
+            strerror(errno));
     return;
 }
 
@@ -144,7 +148,7 @@ int launch_job(pipeline_t *pipeline, job_t *job) {
         // This is why we call setpgid in both processes.
         //
         // We ignore the result of this call because it may fail if the child
-        // manages to beat the parent. 
+        // manages to beat the parent.
         // Any other errors should be handled by the child.
         setpgid(pid, job->pgid);
     }
