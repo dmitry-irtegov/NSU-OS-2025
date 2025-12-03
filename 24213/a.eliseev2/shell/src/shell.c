@@ -13,7 +13,7 @@
 
 int main(int argc, char *argv[]) {
 
-    if (check_terminal(0)) {
+    if (check_terminal()) {
         return 1;
     }
 
@@ -25,7 +25,8 @@ int main(int argc, char *argv[]) {
     signal(SIGQUIT, SIG_IGN); /* To ignore ^\ */
     signal(SIGTSTP, SIG_IGN); /* To ignore ^Z */
     signal(SIGTTOU, SIG_IGN); /* To call tcsetpgrp from background */
-    
+ 
+    save_terminal();
     prompt_init();
     init_jobs(&jobs);
     setbuf(stdout, NULL);

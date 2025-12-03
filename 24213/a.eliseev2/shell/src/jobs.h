@@ -23,10 +23,9 @@ typedef struct {
 
 typedef struct {
     proc_t procs[MAXCMD];
-    int count;
+    int proc_count;
     pid_t pgid;
     pstate_t state;
-    struct termios term_attr;
     int prev_index;
     int next_index;
 } job_t;

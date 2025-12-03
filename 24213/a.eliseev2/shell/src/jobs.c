@@ -10,22 +10,6 @@
 #define WTRAPPED 0 // Linux doesn't have this
 #endif
 
-void init_jobs(joblist_t *list) {
-    for (int i = 0; i < MAXJOBS; i++) {
-        list->jobs[i].state = PROC_EXITED;
-        list->jobs[i].prev_index = i - 1;
-        list->jobs[i].next_index = i + 1;
-    }
-    list->jobs[0].prev_index = -1;
-    list->jobs[MAXJOBS - 1].next_index = -1;
-    list->dead_index = 0;
-    list->alive_index = -1;
-}
-
-int can_add(joblist_t *list) {
-    return list->dead_index != -1;
-}
-
 static int jl_add(joblist_t *list, job_t *job) {
     if (list->dead_index == -1) {
         return -1;
@@ -68,7 +52,7 @@ static void jl_remove(joblist_t *list, int index) {
     list->dead_index = index;
 }
 
-static void jl_to_start(joblist_t *list, int index) {
+static void jl_move_start(joblist_t *list, int index) {
     if (list->alive_index == index) {
         return;
     }
@@ -109,119 +93,111 @@ static void print_status(joblist_t *list, int index, FILE *file) {
     }
 }
 
-static pstate_t code_to_pstate(int code) {
-    switch (code) {
+static void update_proc_state(job_t *job, siginfo_t *siginfo) {
+    if (siginfo->si_pid == 0) {
+        return;
+    }
+
+    pstate_t state;
+    switch (siginfo->si_code) {
     case CLD_DUMPED:
     case CLD_KILLED:
-        return PROC_KILLED;
+        state = PROC_KILLED;
+        break;
     case CLD_EXITED:
-        return PROC_EXITED;
+        state = PROC_EXITED;
+        break;
     case CLD_STOPPED:
     case CLD_TRAPPED:
-        return PROC_STOPPED;
+        state = PROC_STOPPED;
+        break;
     case CLD_CONTINUED:
-        return PROC_RUNNING;
+        state = PROC_RUNNING;
+        break;
     default:
-        return PROC_EXITED;
+        state = PROC_EXITED;
+        break;
+    }
+
+    for (int i = 0; i < job->proc_count; i++) {
+        proc_t *proc = job->procs + i;
+        if (proc->pid != siginfo->si_pid) {
+            continue;
+        }
+        proc->state = state;
+        break;
+    }
+}
+
+static void update_job_state(job_t *job) {
+    job->state = PROC_EXITED;
+    for (int i = 0; i < job->proc_count; i++) {
+        proc_t *proc = job->procs + i;
+
+        switch (proc->state) {
+        case PROC_STOPPED:
+            job->state = PROC_STOPPED;
+            continue;
+        case PROC_KILLED:
+            if (job->state == PROC_EXITED) {
+                job->state = PROC_KILLED;
+            }
+            continue;
+        case PROC_EXITED:
+            continue;
+        default:
+            job->state = PROC_RUNNING;
+            break;
+        }
+        break;
     }
 }
 
 static int wait_job(joblist_t *list, int index, char bg) {
     job_t *job = list->jobs + index;
-    int count_total = job->count;
-    int count_dead = 0;
-    int count_stopped = 0;
-    int count_killed = 0;
 
-    for (int i = 0; i < count_total; i++) {
-        proc_t *proc = job->procs + i;
-        switch (proc->state) {
-        case PROC_KILLED:
-            count_killed++;
-        case PROC_EXITED:
-            count_dead++;
-            continue;
-        default:
-            break;
-        }
+    int wait_options = WEXITED | WSTOPPED | WTRAPPED;
+    wait_options |= bg ? WNOHANG | WCONTINUED : 0;
 
-        siginfo_t info;
-        int wait_options = WEXITED | WSTOPPED | WTRAPPED;
-        wait_options |= bg ? WNOHANG | WCONTINUED : 0;
-        if (waitid(P_PID, proc->pid, &info, wait_options)) {
+    pstate_t old_state = job->state;
+
+    siginfo_t siginfo;
+    do {
+        if (waitid(P_PGID, job->pgid, &siginfo, wait_options)) {
             perror("Could not wait for child process");
             return 1;
         }
+        update_proc_state(job, &siginfo);
+        update_job_state(job);
+    } while (job->state == PROC_RUNNING && siginfo.si_pid);
 
-        if (info.si_pid) {
-            proc->state = code_to_pstate(info.si_code);
-        }
-
-        switch (proc->state) {
-        case PROC_KILLED:
-            count_killed++;
-        case PROC_EXITED:
-            count_dead++;
-            break;
-        case PROC_STOPPED:
-            count_stopped++;
-            break;
-        default:
-            break;
-        }
+    if (job->state == PROC_STOPPED && old_state != PROC_STOPPED) {
+        print_status(list, index, stderr);
+    }
+    if (job->state & PROC_ANYDEAD && bg) {
+        print_status(list, index, stderr);
     }
 
-    if (count_dead == count_total) {
-        job->state = count_killed ? PROC_KILLED : PROC_EXITED;
-        if (bg) {
-            print_status(list, index, stderr);
-        }
-    } else if (count_stopped == count_total - count_dead) {
-        if (job->state != PROC_STOPPED) {
-            job->state = PROC_STOPPED;
-            print_status(list, index, stderr);
-        }
-    } else {
-        job->state = PROC_RUNNING;
-    }
-    return 0;
-}
-
-int wait_background(joblist_t *list) {
-    int next_index = 0;
-    for (int i = list->alive_index; i != -1; i = next_index) {
-        if (wait_job(list, i, 1)) {
-            return 1;
-        }
-        next_index = list->jobs[i].next_index;
-        if (list->jobs[i].state & PROC_ANYDEAD) {
-            jl_remove(list, i);
-        }
-    }
-    return 0;
-}
-
-static int wait_foreground(joblist_t *list, int index) {
-    if (wait_job(list, index, 0)) {
-        return 1;
-    }
-    if (set_foreground(0, getpgrp())) {
-        return 1;
-    }
-    pstate_t state = list->jobs[index].state;
-    if (state == PROC_STOPPED) {
-        if (save_terminal(0, &list->jobs[index].term_attr)) {
-            return 1;
-        }
-    } else if (state == PROC_KILLED) {
-        if (restore_terminal(0, &list->jobs[index].term_attr)) {
-            return 1;
-        }
-    }
-    if (state & PROC_ANYDEAD) {
+    if (job->state & PROC_ANYDEAD) {
         jl_remove(list, index);
     }
     return 0;
+}
+
+void init_jobs(joblist_t *list) {
+    for (int i = 0; i < MAXJOBS; i++) {
+        list->jobs[i].state = PROC_EXITED;
+        list->jobs[i].prev_index = i - 1;
+        list->jobs[i].next_index = i + 1;
+    }
+    list->jobs[0].prev_index = -1;
+    list->jobs[MAXJOBS - 1].next_index = -1;
+    list->dead_index = 0;
+    list->alive_index = -1;
+}
+
+int can_add(joblist_t *list) {
+    return list->dead_index != -1;
 }
 
 int add_job(joblist_t *list, job_t *job, char bg) {
@@ -230,19 +206,43 @@ int add_job(joblist_t *list, job_t *job, char bg) {
         fprintf(stderr, "Could not find a slot for another job.\n");
         return 1;
     }
+
     if (bg) {
         print_status(list, index, stdout);
         return 0;
-    } else {
-        return wait_foreground(list, index);
     }
+    if (wait_job(list, index, 0)) {
+        return 1;
+    }
+    if (set_foreground(getpgid(getpid()))) {
+        return 1;
+    }
+    // Save terminal attributes if the job exited successfully,
+    // revert if the job got killed or stopped
+    if (list->jobs[index].state == PROC_EXITED){
+        save_terminal();
+    } else {
+        restore_terminal();
+    }
+    return 0;
+}
+
+int wait_background(joblist_t *list) {
+    int next_index = 0;
+    for (int i = list->alive_index; i != -1; i = next_index) {
+        next_index = list->jobs[i].next_index;
+        if (wait_job(list, i, 1)) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int bring_to_foreground(joblist_t *list, int index) {
     if (index == -1) {
         index = list->alive_index;
         if (index == -1) {
-            fprintf(stderr, "No background jobs.\n");
+            fprintf(stdout, "There are no jobs.\n");
             return 0;
         }
     }
@@ -257,28 +257,33 @@ int bring_to_foreground(joblist_t *list, int index) {
         return 0;
     }
 
-    fprintf(stdout, "Bringing job %d (%ld) to foreground.\n", index,
+    fprintf(stdout, "[%d] (%ld): sent to foreground\n", index,
             (long)job->pgid);
-    jl_to_start(list, index);
+    jl_move_start(list, index);
     job->state = PROC_RUNNING;
-    if (restore_terminal(0, &job->term_attr)) {
+
+    save_terminal();
+    if (set_foreground(job->pgid)) {
         return 1;
     }
-    if (set_foreground(0, job->pgid)) {
+
+    kill(-job->pgid, SIGCONT);
+    if (wait_job(list, index, 0)) {
         return 1;
     }
-    if (kill(-job->pgid, SIGCONT)) {
-        perror("Could not send SIGCONT to job");
+
+    if (set_foreground(getpgid(getpid()))) {
         return 1;
     }
-    return wait_foreground(list, index);
+    restore_terminal();
+    return 0;
 }
 
 int resume_background(joblist_t *list, int index) {
     if (index == -1) {
         index = list->alive_index;
         if (index == -1) {
-            fprintf(stderr, "No background jobs.\n");
+            fprintf(stdout, "There are no jobs.\n");
             return 0;
         }
     }
@@ -296,9 +301,9 @@ int resume_background(joblist_t *list, int index) {
         return 0;
     }
 
-    fprintf(stdout, "Resuming job %d (%ld).\n", index, (long)job->pgid);
-    jl_to_start(list, index);
+    jl_move_start(list, index);
     job->state = PROC_RUNNING;
+    print_status(list, index, stdout);
     if (kill(-job->pgid, SIGCONT)) {
         perror("Could not send SIGCONT to job");
         return 1;
@@ -308,10 +313,9 @@ int resume_background(joblist_t *list, int index) {
 
 void print_background(joblist_t *list) {
     if (list->alive_index == -1) {
-        fprintf(stdout, "No background jobs.\n");
+        fprintf(stdout, "There are no jobs.\n");
         return;
     }
-    fprintf(stdout, "Background jobs:\n");
     for (int i = list->alive_index; i != -1; i = list->jobs[i].next_index) {
         print_status(list, i, stdout);
     }

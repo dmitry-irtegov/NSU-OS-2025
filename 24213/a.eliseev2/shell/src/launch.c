@@ -25,7 +25,7 @@ static void setup_and_exec(command_t *command, pid_t pgid, int fd_in,
         return;
     }
     if (!bg && pgid == 0) {
-        if (set_foreground(0, getpgrp())) {
+        if (set_foreground(getpgrp())) {
             return;
         }
     }
@@ -56,16 +56,10 @@ static void setup_and_exec(command_t *command, pid_t pgid, int fd_in,
 }
 
 int launch_job(pipeline_t *pipeline, job_t *job) {
-    struct termios term_attr;
-    if (save_terminal(0, &term_attr)) {
-        return 1;
-    }
-
     *job = (job_t){
-        .count = pipeline->cmd_count,
+        .proc_count = pipeline->cmd_count,
         .state = PROC_RUNNING,
         .pgid = 0,
-        .term_attr = term_attr,
     };
 
     int fd_prev = 0;
