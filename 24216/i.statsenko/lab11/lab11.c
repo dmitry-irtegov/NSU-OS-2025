@@ -17,6 +17,7 @@ int execvpe(const char* file, char* const argv[], char* const envp[]) {
 int main() {
     char* envp[] = {"PATH=/bin:/usr/bin", "TESTED=HelloGophers", NULL};
     char* argv[] = {"env", NULL};
+    int status;
     
     pid_t pid = fork();
     switch (pid) {
@@ -30,7 +31,6 @@ int main() {
             exit(EXIT_FAILURE);
 
         default:
-            int status;
             if (waitpid(pid, &status, 0) == -1) {
                 perror("waitpid error");
                 exit(EXIT_FAILURE);
