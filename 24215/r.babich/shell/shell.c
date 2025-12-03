@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <signal.h>
 #include "shell.h"
 
 char *infile, *outfile, *appfile;
@@ -17,6 +18,7 @@ int main(int argc, char *argv[]) {
 	char prompt[50];		/* shell prompt */
 
 	/* PLACE SIGNAL CODE HERE  */
+	signal(SIGINT, SIG_IGN);
 
 	sprintf(prompt, "[%s] ", argv[0]);
 	while (promptline(prompt, line, sizeof(line)) > 0) {		/* until eof */
@@ -47,6 +49,9 @@ int main(int argc, char *argv[]) {
 					perror("Fork failed.");
 					exit(1);
 				case 0:
+					signal(SIGINT, SIG_DFL);
+					signal(SIGQUIT, SIG_DFL);
+
 					if (infile && i == 0) {
 						int fd = open(infile, O_RDONLY);
 						if (fd < 0) {
@@ -75,12 +80,14 @@ int main(int argc, char *argv[]) {
 							exit(1);
 						}
 						close(fd);
-					}
+					} 
 					execvp(cmds[i].cmdargs[0], cmds[i].cmdargs);
 					perror("Execvp failed.");
 					exit(1);
 				default:
 					if (bkgrnd) {
+						signal(SIGINT, SIG_IGN);
+						signal(SIGQUIT, SIG_IGN);
     				printf("[Background pid %d]\n", pid);
 					} else {
 						if (waitpid(pid, &status, 0) == -1) {
