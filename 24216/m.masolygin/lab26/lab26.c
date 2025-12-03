@@ -18,17 +18,14 @@ int main() {
 
     if (fputs(str, pipe_fp) == EOF) {
         perror("fputs");
-        if (pclose(pipe_fp) == -1) {
-            perror("pclose");
-            exit(1);
-        }
+        pclose(pipe_fp);
         return 1;
     }
 
     status = pclose(pipe_fp);
     if (status == -1) {
         perror("pclose");
-        exit(1);
+        return 1;
     }
 
     return 0;
