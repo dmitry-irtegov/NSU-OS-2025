@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync/atomic"
 	"syscall"
 )
 
@@ -17,10 +16,10 @@ func main() {
 	for sig := range signals {
 		switch sig {
 		case syscall.SIGINT:
-			atomic.AddInt32(&count, 1)
-			fmt.Print('\a')
+			count++
+			fmt.Printf("%c", '\a')
 		case syscall.SIGQUIT:
-			fmt.Println("\nResult: ", atomic.LoadInt32(&count))
+			fmt.Println("\nResult:", count)
 			os.Exit(0)
 		}
 	}
