@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,6 +6,7 @@
 #include <ctype.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <errno.h>
 
 #define SOCKET_PATH "mysocket" 
 #define BUFFER_SIZE 1024
