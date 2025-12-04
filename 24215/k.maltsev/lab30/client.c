@@ -1,10 +1,10 @@
-#include <sys/types.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <errno.h>
 
 #define SOCKET_PATH "mysocket"
@@ -16,18 +16,15 @@ int main() {
     char buffer[BUFFER_SIZE];
     ssize_t num_read;
 
-    //Создаем сокет
     if ((sfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("socket error");
         exit(1);
     }
 
-    //Настраиваем адрес
     memset(&addr, 0, sizeof(struct sockaddr_un));
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
 
-    //Соединяемся (connect)
     if (connect(sfd, (struct sockaddr*)&addr, sizeof(addr)) == -1) {
         perror("connect error");
         exit(1);
@@ -35,12 +32,31 @@ int main() {
 
     printf("Connected. Type text:\n");
 
-    //Читаем с клавиатуры и шлем в сокет
     while ((num_read = read(STDIN_FILENO, buffer, BUFFER_SIZE)) > 0) {
-        if (write(sfd, buffer, num_read) != num_read) {
-            perror("write error");
-            exit(1);
+        
+        char *p = buffer; 
+        ssize_t remaining = num_read; 
+        ssize_t written;
+
+        while (remaining > 0) {
+            written = write(sfd, p, remaining);
+            
+            if (written == -1) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                perror("write error");
+                exit(1);
+            }
+
+            p += written;
+            remaining -= written;
         }
+    }
+
+    if (num_read == -1) {
+        perror("read error from stdin");
+        exit(1);
     }
 
     close(sfd);
