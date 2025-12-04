@@ -1,9 +1,9 @@
 #include <stdio.h>
-#include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <signal.h>
 
-volatile sig_atomic_t count = 0;
+volatile int count = 0;
 
 void handle_sigint(int sig) {
     write(STDOUT_FILENO, "\a", 1);
@@ -16,10 +16,19 @@ void handle_sigquit(int sig) {
 }
 
 int main() {
-    signal(SIGINT, handle_sigint);
-    signal(SIGQUIT, handle_sigquit);
+    struct sigaction sa;
 
-    while(1) {
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+
+    sa.sa_handler = handle_sigquit;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGQUIT, &sa, NULL);
+
+    while (1) {
         pause();
     }
 
