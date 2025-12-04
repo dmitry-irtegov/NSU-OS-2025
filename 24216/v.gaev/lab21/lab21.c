@@ -6,11 +6,13 @@
 volatile int count = 0;
 
 void handle_sigint(int sig) {
+    (void)sig;
     write(STDOUT_FILENO, "\a", 1);
     count++;
 }
 
 void handle_sigquit(int sig) {
+    (void)sig;
     printf("\nЗвуковой сигнал прозвучал %d раз(а)\n", count);
     exit(0);
 }
