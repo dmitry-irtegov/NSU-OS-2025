@@ -62,13 +62,24 @@ void sigchld_handler(int sig)
 	while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED | WCONTINUED)) > 0)
 	{
 		pid_t pgid = getpgid(pid);
+		if (pgid == -1)
+		{
+			pgid = pid;
+		}
+
 		int job_idx = find_job(pgid);
 
 		if (job_idx >= 0)
 		{
 			if (WIFEXITED(status) || WIFSIGNALED(status))
 			{
-				jobs[job_idx].state = JOB_DONE;
+				fprintf(stderr, "[%d] + done       %s\n", jobs[job_idx].pgid, jobs[job_idx].cmdline);
+				free(jobs[job_idx].cmdline);
+				for (int j = job_idx; j < njobs - 1; j++)
+				{
+					jobs[j] = jobs[j + 1];
+				}
+				njobs--;
 			}
 			else if (WIFSTOPPED(status))
 			{
