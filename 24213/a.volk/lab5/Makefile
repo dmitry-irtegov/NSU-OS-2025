@@ -2,11 +2,12 @@ CXX=g++
 CXXFLAGS=-std=c++17 -Wall -Wextra -Wpedantic -g
 
 SRC=main.cpp
+EXE=getline
 
-all: strlen
+all: $(EXE)
 
 clean:
-	rm -f strlen
+	rm -f $(EXE)
 
-strlen: $(SRC)
+$(EXE): $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $@ 
