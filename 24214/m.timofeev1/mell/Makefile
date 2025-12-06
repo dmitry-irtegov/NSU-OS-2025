@@ -8,12 +8,12 @@ SOURCES = $(SRCDIR)/main.c $(SRCDIR)/parseline.c $(SRCDIR)/promptline.c $(SRCDIR
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 TARGET = $(BINDIR)/mell
 
-all: $(TARGET)
+all: $(OBJDIR) $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $^
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+$(OBJDIR)/%.o: $(SRCDIR)/%.c $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(OBJDIR):
