@@ -1,0 +1,6 @@
+# Compiled binary
+mell
+
+# Object files
+obj/
+*.o
