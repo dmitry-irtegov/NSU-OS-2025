@@ -13,7 +13,11 @@
 #include <langinfo.h>
 
 int main(int argc, char** argv) {
-
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <file1> <file2> ... <fileN>\n", argv[0]);
+        return 1;
+    }
+    
     for(int files = 1; files < argc; files++) {
 
         struct stat sbuf;
