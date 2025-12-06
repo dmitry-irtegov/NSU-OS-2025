@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
                 printf("%-8s ", pwuid->pw_name);
             }
 
-            gruid = getgrgid(sbuf.st_uid);
+            gruid = getgrgid(sbuf.st_gid);
             if (gruid == NULL) {
                 printf("%-8d ", sbuf.st_gid);
             } else {
