@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#define SOCKET_PATH "/tmp/uppercase_socket"
+#define SOCKET_PATH "/tmp/uppercase_socket_n.mashkin"
 #define BUFFER_SIZE 4096
 
 int main() {
