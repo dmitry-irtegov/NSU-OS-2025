@@ -1,7 +1,7 @@
+#include "pipeline.h"
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
-#include "shell.h"
 
 int promptline(char *prompt, char *line, int sizline) {
 	int n = 0;
@@ -15,8 +15,8 @@ int promptline(char *prompt, char *line, int sizline) {
 			*(line + n) = ' ';
 			*(line + n - 1) = ' ';
 			*(line + n - 2) = ' ';
-			continue;		/* read next line */
+			continue;	
 		}
-		return(n);		/* all done */
+		return(n);	
 	}
 }
