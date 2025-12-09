@@ -13,7 +13,7 @@ builtin_t builtins[] = {
 	{"fg", execute_fg},
 	{"bg", execute_bg},
 	{"jobs", execute_jobs},
-	{NULL}
+	{NULL, NULL}
 };
 
 bool try_execute_builtin(pipeline_t *pipeline, job_list_t *list) {
@@ -58,7 +58,7 @@ static void execute_bg(command_t *command, job_list_t *list) {
 		return;
 	}
 
-	put_job_in_bg(list, current);
+	put_job_in_bg(current);
 }
 
 static void execute_jobs(command_t *command, job_list_t *list) {

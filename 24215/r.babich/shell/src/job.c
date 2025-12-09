@@ -176,7 +176,7 @@ void put_job_in_fg(job_list_t *list, job_t *job, bool cont) {
 	}
 }
 
-void put_job_in_bg(job_list_t *list, job_t *job) {
+void put_job_in_bg(job_t *job) {
 	job->status = JOB_RUNNING;
 	fprintf(stderr, "Putting job [%d] with pid %d to background.\n", job->id, job->pgid);
 	if (kill(-job->pgid, SIGCONT)) {

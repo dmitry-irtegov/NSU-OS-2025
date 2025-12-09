@@ -32,7 +32,7 @@ void update_job_status(job_t *job, int status);
 
 void put_job_in_fg(job_list_t *list, job_t *job, bool cont);
 
-void put_job_in_bg(job_list_t *list, job_t *job);
+void put_job_in_bg(job_t *job);
 
 void wait_for_background_job(job_list_t *list, job_t *job); 
 
