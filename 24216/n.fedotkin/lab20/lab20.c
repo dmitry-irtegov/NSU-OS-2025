@@ -86,15 +86,13 @@ int main(int argc, char *argv[]) {
     int result = search_dir(".", argv[1]);
     
 
-    switch (result) {
-        case -1:
-            exit(EXIT_FAILURE);
-
-        case  0:
-            printf("%s\n", argv[1]);
-            exit(EXIT_SUCCESS);
-
-        default:
-            exit(EXIT_SUCCESS);
+    if (result == -1) {
+        exit(EXIT_FAILURE);
     }
+
+    if (result == 0) {
+        printf("%s\n", argv[1]);
+    }
+
+    exit(EXIT_SUCCESS);
 }
