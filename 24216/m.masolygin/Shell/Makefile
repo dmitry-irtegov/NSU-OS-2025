@@ -1,0 +1,24 @@
+
+
+CC = gcc
+CFLAGS = -Wall -g
+SRCS = parseline.c promptline.c shell.c utils.c signal.c jobs.c pipes.c builtin.c
+OBJS = $(SRCS:.c=.o)
+TARGET = shell
+
+.PHONY: all debug clean
+
+all: $(TARGET)
+
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS)
+
+%.o: %.c shell.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+debug: clean
+	$(MAKE) all CFLAGS="$(CFLAGS) -DDEBUG"
+
+clean:
+	rm -f $(OBJS) $(TARGET)
+
