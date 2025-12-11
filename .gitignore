@@ -56,7 +56,6 @@ dkms.conf
 *.dwo
 
 # some musom
-core
 core.*
 .nfs*
 .DS_Store
