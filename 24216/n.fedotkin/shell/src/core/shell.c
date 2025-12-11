@@ -145,6 +145,7 @@ void shell_check_background_tasks(void) {
                             printf("%s", task->processes[i]->argv[0]);
                         }
                         printf("\n");
+                        task->notify = 1;
                     }
                 } else if (any_stopped) {
                     task->status = TASK_STOPPED;
@@ -172,6 +173,7 @@ int shell_execute_builtin(char* cmd, char** argv, int argc) {
         return 1;
     } else if (strcmp(cmd, "jobs") == 0) {
         print_all_tasks(&task_list);
+        cleanup_completed_tasks(&task_list);
         return 1;
     } else if (strcmp(cmd, "fg") == 0) {
         size_t job_id = 1;
@@ -184,6 +186,7 @@ int shell_execute_builtin(char* cmd, char** argv, int argc) {
                 if (i > 0) printf(" | ");
                 printf("%s", task->processes[i]->argv[0]);
             }
+            printf("\n");
             put_task_in_fg(task, task->status == TASK_STOPPED);
         } else {
             fprintf(stderr, "fg: job %zu not found\n", job_id);

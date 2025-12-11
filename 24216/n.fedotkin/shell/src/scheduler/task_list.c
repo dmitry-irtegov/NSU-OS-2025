@@ -55,6 +55,7 @@ void cleanup_completed_tasks(task_list_t* list) {
     task_t *prev = NULL;
     task_t* curr = list->first;
     while (curr) {
+        task_t* next = curr->next;
         if (curr->status == TASK_COMPLETED && curr->notify) {
             if (prev) {
                 prev->next = curr->next;
@@ -69,7 +70,11 @@ void cleanup_completed_tasks(task_list_t* list) {
         } else {
             prev = curr;
         }
-        curr = curr->next;
+        curr = next;
+    }
+    
+    if (list->count == 0) {
+        list->next_task_id = 1;
     }
 }
 

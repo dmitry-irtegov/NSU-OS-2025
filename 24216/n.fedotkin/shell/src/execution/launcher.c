@@ -1,4 +1,5 @@
 #include "execution/launcher.h"
+#include "scheduler/task_list.h"
 
 int launch_task(task_t* task) {
     if (!task || task->process_count == 0) {
@@ -171,6 +172,15 @@ void put_task_in_fg(task_t* task, int cont) {
 
     if (tcsetattr(STDIN_FILENO, TCSADRAIN, shell_get_tmodes()) < 0) {
         perror("tcsetattr (shell)");
+    }
+
+    if (task->status == TASK_COMPLETED) {
+        task_list_t* tasks = shell_get_tasks();
+        remove_task(tasks, task);
+        destroy_task(task);
+        if (tasks->count == 0) {
+            tasks->next_task_id = 1;
+        }
     }
 }
 
