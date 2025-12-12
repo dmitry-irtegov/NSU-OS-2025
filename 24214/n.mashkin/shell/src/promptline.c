@@ -6,8 +6,8 @@
 #include "shell.h"
 
 int promptline(char *line, int sizline) {
-    char prompt[100];
-    char *dir = getcwd(NULL, 50);
+    char prompt[1000];
+    char *dir = getcwd(NULL, 500);
     char *home_dir = getenv("HOME");
     if (home_dir == NULL) {
         struct passwd *pwd = getpwuid(getuid());
@@ -23,7 +23,7 @@ int promptline(char *line, int sizline) {
             dir[i - home_dir_len + 1] = dir[i];
         }
     }
-    snprintf(prompt, 99, "\033[38;2;91;194;91m{glorp}\033[0m \033[38;2;175;175;96m[%s]\033[0m $> ", dir);
+    snprintf(prompt, 999, "\033[38;2;91;194;91m{glorp}\033[0m \033[38;2;175;175;96m[%s]\033[0m $> ", dir);
 
     int n = 0;
     write(1, prompt, strlen(prompt));
