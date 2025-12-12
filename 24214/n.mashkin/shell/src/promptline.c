@@ -7,7 +7,7 @@
 
 int promptline(char *line, int sizline) {
     char prompt[100];
-    char *dir = getcwd(NULL, 0);
+    char *dir = getcwd(NULL, 50);
     char *home_dir = getenv("HOME");
     if (home_dir == NULL) {
         struct passwd *pwd = getpwuid(getuid());

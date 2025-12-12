@@ -172,9 +172,11 @@ void ls(char **args) {
     }
 
     char *new_arg = "--color=auto";
-    args[len] = malloc(strlen(new_arg) + 1);
-    strcpy(args[len], new_arg);
-    args[len + 1] = NULL;
+    for (int i = len + 1; i > 1; i--) {
+        args[i] = args[i - 1];
+    }
+    args[1] = malloc(strlen(new_arg) + 1);
+    strcpy(args[1], new_arg);
 }
 
 /* Встроенные команды */
