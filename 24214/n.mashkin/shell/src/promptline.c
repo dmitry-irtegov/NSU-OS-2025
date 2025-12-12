@@ -13,6 +13,8 @@ int promptline(char *line, int sizline) {
         struct passwd *pwd = getpwuid(getuid());
         if (pwd) {
             home_dir = pwd->pw_dir;
+        } else {
+            home_dir = "/home/students/24200/n.mashkin";
         }
     }
     if (strstr(dir, home_dir) == dir) {
