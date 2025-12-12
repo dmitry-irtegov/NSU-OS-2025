@@ -23,7 +23,7 @@ int parseline(char *line) {
     pipelines[pind].cmds[cind].cmdargs[aind] = NULL;
 
     s = line;
-    while (*s) {
+    while (s && *s) {
         s = blankskip(s);
         if (!*s) break;
 
