@@ -3,15 +3,17 @@
 #include <string.h>
 #include "shell.h"
 
-static char *blankskip(register char *);
+char* blankskip(char *s) {
+    while (isspace(*s) && *s++);
+    return s;
+}
 
 int parseline(char *line) {
-    register char *s;
+    char *s;
     int aflg = 0;
     int pind = 0, cind = 0, aind = 0;
-    static char delim[] = " \t|&<>;\n";
+    char delim[] = " \t|&<>;\n";
 
-    /* initialize  */
     pipelines[pind].bkgrnd = 0;
     pipelines[pind].ncmds = 0;
     pipelines[pind].cmds[cind].nargs = 0;
@@ -19,12 +21,12 @@ int parseline(char *line) {
     pipelines[pind].outfile = NULL;
     pipelines[pind].appfile = NULL;
     pipelines[pind].cmds[cind].cmdargs[aind] = NULL;
-    s = line;
 
-    while (*s) {        /* until line has been parsed */
-        s = blankskip(s);       /*  skip white space */
-        if (!*s) break; /*  done with line */
-        /*  handle <, >, |, &, and ;  */
+    s = line;
+    while (*s) {
+        s = blankskip(s);
+        if (!*s) break;
+
         switch(*s) {
             case '&':
                 pipelines[pind].bkgrnd = 1;
@@ -47,8 +49,9 @@ int parseline(char *line) {
                     pipelines[pind].outfile = s;
                 }
                 s = strpbrk(s, delim);
-                if (s && isspace(*s))
+                if (s && isspace(*s)) {
                     *s++ = '\0';
+                }
                 break;
             case '<':
                 *s++ = '\0';
@@ -59,12 +62,13 @@ int parseline(char *line) {
                 }
                 pipelines[pind].infile = s;
                 s = strpbrk(s, delim);
-                if (s && isspace(*s))
+                if (s && isspace(*s)) {
                     *s++ = '\0';
+                }
                 break;
             case '|':
                 if (pipelines[pind].cmds[cind].nargs == 0) {
-                    fprintf(stderr, "Syntax error: No commands before '|' found\n");
+                    fprintf(stderr, "Syntax error: No commands found before '|'\n");
                     return(-1);
                 }
                 *s++ = '\0';
@@ -73,7 +77,7 @@ int parseline(char *line) {
                 break;
             case ';':
                 if (pipelines[pind].ncmds == 0) {
-                    fprintf(stderr, "Syntax error: No commands before ';' found\n");
+                    fprintf(stderr, "Syntax error: No commands found before ';'\n");
                     return -1;
                 }
                 *s++ = '\0';
@@ -86,35 +90,24 @@ int parseline(char *line) {
                 pipelines[pind].cmds[cind].cmdargs[aind = 0] = NULL;
                 break;
             default:
-                /*  a command argument  */
                 if (pipelines[pind].cmds[cind].nargs == 0) {
-                    /* next command */
                     pipelines[pind].ncmds++;
                 }
                 pipelines[pind].cmds[cind].cmdargs[aind++] = s;
                 pipelines[pind].cmds[cind].cmdargs[aind] = NULL;
                 pipelines[pind].cmds[cind].nargs++;
                 s = strpbrk(s, delim);
-                if (s && isspace(*s))
+                if (s && isspace(*s)) {
                     *s++ = '\0';
+                }
                 break;
-        }  /*  close switch  */
-    }  /* close while  */
-    /*  error check  */
-    /*
-*  The only errors that will be checked for are
-*  no command on the right side of a pipe
-*  no command to the left of a pipe is checked above
-*/
+        }
+    }
 
     if (pipelines[pind].ncmds != 0 && pipelines[pind].cmds[cind].nargs == 0) {
         fprintf(stderr, "Syntax error: End of command line found, command expected\n");
-        return(-1);
+        return -1;
     }
     return pipelines[pind].ncmds == 0 ? pind : pind + 1;
 }
 
-static char* blankskip(register char *s) {
-    while (isspace(*s) && *s) ++s;
-    return(s);
-}

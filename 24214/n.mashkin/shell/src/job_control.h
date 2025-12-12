@@ -5,7 +5,7 @@
 #include "shell.h"
 
 /* Структура для хранения информации о заданиях */
-struct job {
+typedef struct job {
     pid_t pgid;          /* PGID группы процессов конвейера */
     int jid;            /* ID задания (1, 2, 3, ...) */
     char state;         /* 'R' - running, 'S' - stopped */
@@ -13,16 +13,19 @@ struct job {
     int nprocs;         /* Количество процессов в конвейере */
     pid_t pids[MAXCMDS]; /* PID процессов в конвейере */
     struct job *next;
-};
+} job_t;
 
-void do_job_fg(char **args);
-void do_job_bg(char **args);
-void list_jobs(); 
-struct job *find_job_by_pid(pid_t pid);
-struct job *find_job_by_pgid(pid_t pgid);
-void add_job(pid_t pgid, int nprocs, pid_t pids[], char *cmdline);
-void remove_job(pid_t pgid);
-void wait_for_job(struct job *j);
+void put_job_in_foreground(job_t *);
+void put_job_in_background(job_t *);
+job_t *get_job_by_spec(char *);
+
+job_t *find_job_by_pid(pid_t);
+job_t *find_job_by_pgid(pid_t);
+void add_job(pid_t, int, pid_t[], char *);
+void remove_job(pid_t);
+void wait_for_job(job_t *);
 void update_job_status();
+
+extern job_t *job_list;
 
 #endif

@@ -6,6 +6,8 @@
 #define MAXARGS 256
 #define MAXCMDS 50
 #define MAXPPLINES 50
+#define MAXPATH 100
+#define MAXPROMPT 150
 
 typedef struct command {
     char *cmdargs[MAXARGS];

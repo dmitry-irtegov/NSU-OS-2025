@@ -1,11 +1,29 @@
 COMPILER_FLAGS=-Wall -Wextra -Werror -Wno-unused-parameter
-FILES=src/shell.c src/job_control.c src/promptline.c src/parseline.c
+OBJECT_FILES=job_control.o parseline.o promptline.o
 
-shell: $(FILES)
-	gcc $(COMPILER_FLAGS) $(FILES) -o shell
+shell: src/shell.c builtins.o $(OBJECT_FILES)
+	gcc $(COMPILER_FLAGS) src/shell.c builtins.o $(OBJECT_FILES) -o shell
 
-debug: $(FILES)
-	gcc $(COMPILER_FLAGS) $(FILES) -o debug -DDEBUG
+debug: src/shell.c builtins.o $(OBJECT_FILES)
+	gcc $(COMPILER_FLAGS) src/shell.c builtins.o $(OBJECT_FILES) -o debug -DDEBUG
 
-glosh: $(FILES)
-	gcc $(COMPILER_FLAGS) $(FILES) -o glosh -DGLORP
+glosh: src/shell.c builtins_glorp.o $(OBJECT_FILES)
+	gcc $(COMPILER_FLAGS) src/shell.c builtins_glorp.o $(OBJECT_FILES) -o glosh -DGLORP
+
+builtins.o: src/builtins.c
+	gcc -c $(COMPILER_FLAGS) src/builtins.c -o builtins.o
+
+builtins_glorp.o: src/builtins.c
+	gcc -c $(COMPILER_FLAGS) src/builtins.c -o builtins_glorp.o -DGLORP
+
+job_control.o: src/job_control.c
+	gcc -c $(COMPILER_FLAGS) src/job_control.c -o job_control.o
+
+parseline.o: src/parseline.c
+	gcc -c $(COMPILER_FLAGS) src/parseline.c -o parseline.o
+
+promptline.o: src/promptline.c
+	gcc -c $(COMPILER_FLAGS) src/promptline.c -o promptline.o
+
+clean:
+	rm -f builtins.o builtins_glorp.o $(OBJECT_FILES) shell debug glosh
