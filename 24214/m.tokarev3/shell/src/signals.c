@@ -12,13 +12,17 @@ void handle_sigtstp(int sig)
         {
             perror("kill");
             printf("\n");
-            print_prompt();
+            rl_on_new_line();
+            rl_replace_line("", 0);
+            rl_redisplay();
         }
     }
     else
     {
         printf("\n");
-        print_prompt();
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_redisplay();
     }
 }
 
@@ -34,13 +38,17 @@ void handle_sigint(int sig)
         {
             perror("kill");
             printf("\n");
-            print_prompt();
+            rl_on_new_line();
+            rl_replace_line("", 0);
+            rl_redisplay();
         }
     }
     else
     {
         printf("\n");
-        print_prompt();
+        rl_on_new_line();
+        rl_replace_line("", 0);
+        rl_redisplay();
     }
 }
 

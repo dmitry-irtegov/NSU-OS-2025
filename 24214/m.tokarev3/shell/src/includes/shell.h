@@ -12,8 +12,9 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <termios.h>
-#include <errno.h>
 #include <limits.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 #define DEFAULT_SHELL_NAME "mega_shell_3000"
 
@@ -63,43 +64,36 @@ extern pid_t shell_pgid;
 extern pid_t foreground_pgid;
 
 // parseline.c
-int parseline(char *line);
+int parseline(char **line);
 
 // execute.c
 void execute_commands();
-void setup_redirections();
 void execute_pipeline();
 
 // shell.c
-void print_prompt();
 void init_shell();
+void clear_globals();
 
 // signals.c
 void handle_sigtstp(int sig);
 void handle_sigint(int sig);
 void handle_sigchld(int sig);
-void handler_sigquit(int sig);
 
 // jobs.c
 void initialize_jobs();
 void add_job(pid_t pid, pid_t pgid, char *command);
 int get_job_count();
-
 void check_jobs();
+void print_done_jobs();
 void print_jobs();
 void cleanup_jobs();
 void set_job_status(pid_t pid, job_status_t status);
 void set_foreground_job(pid_t pgid);
 void put_job_in_foreground(job_t *j, int cont);
 void put_job_in_background(job_t *j, int cont);
-
-int find_job_by_id(int job_id);
-int find_latest_stopped_job();
-
 void fg_handler();
 void bg_handler();
 
 // builtin.c
 int is_builtin(char *arg);
-void execute_builtin();
-void cd_handler();
+int execute_builtin();

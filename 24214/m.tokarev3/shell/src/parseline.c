@@ -1,23 +1,7 @@
 #include "shell.h"
 #include <ctype.h>
 
-void clear_globals()
-{
-    infile = NULL;
-    outfile = NULL;
-    appfile = NULL;
-    bkgrnd = 0;
-    num_cmds = 0;
-    for (int i = 0; i < MAX_CMDS; i++)
-    {
-        for (int j = 0; j < MAX_ARGS; j++)
-        {
-            cmds[i].cmdargs[j] = NULL;
-        }
-    }
-}
-
-int get_next_token(char **line, char *token)
+static int get_next_token(char **line, char *token)
 {
     char *p = *line;
     int token_len = 0;
@@ -31,7 +15,7 @@ int get_next_token(char **line, char *token)
         return 0;
     }
 
-    if (*p == '|' || *p == '<' || *p == '&')
+    if (*p == '|' || *p == '<' || *p == '&' || *p == ';')
     {
         token[0] = *p;
         token[1] = '\0';
@@ -69,7 +53,7 @@ int get_next_token(char **line, char *token)
                 p++;
                 continue;
             }
-            else if (isspace(*p) || *p == '|' || *p == '<' || *p == '>' || *p == '&')
+            else if (isspace(*p) || *p == '|' || *p == '<' || *p == '>' || *p == '&' || *p == ';')
             {
                 break;
             }
@@ -98,25 +82,18 @@ int get_next_token(char **line, char *token)
     return token_len;
 }
 
-/*
- * @return count of commands. If error returns -1.
- */
-int parseline(char *line)
+int parseline(char **line_ptr_ref)
 {
     clear_globals();
 
-    line[strcspn(line, "\n")] = '\0';
+    if (!line_ptr_ref || !*line_ptr_ref)
+        return 0;
 
     char token[MAX_LINE];
-    char *line_ptr = line;
+    char *line_ptr = *line_ptr_ref;
 
     int cmd_index = 0;
     int arg_index = 0;
-
-    static char token_storage[MAX_CMDS * MAX_ARGS][MAX_LINE];
-    static int storage_index = 0;
-
-    storage_index = 0;
 
     while (1)
     {
@@ -131,7 +108,11 @@ int parseline(char *line)
         if (token_len == 0)
             break; // Конец строки
 
-        if (strcmp(token, "&") == 0)
+        if (strcmp(token, ";") == 0)
+        {
+            break;
+        }
+        else if (strcmp(token, "&") == 0)
         {
             bkgrnd = 1;
             break;
@@ -144,15 +125,7 @@ int parseline(char *line)
                 fprintf(stderr, "Parse error: missing filename after '<'\n");
                 return -1;
             }
-
-            if (storage_index >= MAX_CMDS * MAX_ARGS)
-            {
-                fprintf(stderr, "Parse error: too many tokens\n");
-                return -1;
-            }
-
-            strcpy(token_storage[storage_index], token);
-            infile = token_storage[storage_index++];
+            infile = strdup(token);
         }
         else if (strcmp(token, ">") == 0)
         {
@@ -162,15 +135,7 @@ int parseline(char *line)
                 fprintf(stderr, "Parse error: missing filename after '>'\n");
                 return -1;
             }
-
-            if (storage_index >= MAX_CMDS * MAX_ARGS)
-            {
-                fprintf(stderr, "Parse error: too many tokens\n");
-                return -1;
-            }
-
-            strcpy(token_storage[storage_index], token);
-            outfile = token_storage[storage_index++];
+            outfile = strdup(token);
         }
         else if (strcmp(token, ">>") == 0)
         {
@@ -180,15 +145,7 @@ int parseline(char *line)
                 fprintf(stderr, "Parse error: missing filename after '>>'\n");
                 return -1;
             }
-
-            if (storage_index >= MAX_CMDS * MAX_ARGS)
-            {
-                fprintf(stderr, "Parse error: too many tokens\n");
-                return -1;
-            }
-
-            strcpy(token_storage[storage_index], token);
-            appfile = token_storage[storage_index++];
+            appfile = strdup(token);
         }
         else if (strcmp(token, "|") == 0)
         {
@@ -217,19 +174,14 @@ int parseline(char *line)
                 return -1;
             }
 
-            if (storage_index >= MAX_CMDS * MAX_ARGS)
-            {
-                fprintf(stderr, "Parse error: too many tokens\n");
-                return -1;
-            }
-
-            strcpy(token_storage[storage_index], token);
-            cmds[cmd_index].cmdargs[arg_index] = token_storage[storage_index++];
+            cmds[cmd_index].cmdargs[arg_index] = strdup(token);
             arg_index++;
         }
     }
 
     cmds[cmd_index].cmdargs[arg_index] = NULL;
+
+    *line_ptr_ref = line_ptr;
 
     if (cmds[0].cmdargs[0] == NULL)
         return 0; // Пустая строка

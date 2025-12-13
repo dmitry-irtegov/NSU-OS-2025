@@ -1,5 +1,44 @@
 #include "shell.h"
 
+static void setup_redirections()
+{
+    if (infile)
+    {
+        int fd = open(infile, O_RDONLY);
+        if (fd < 0)
+        {
+            perror(infile);
+            exit(1);
+        }
+        dup2(fd, STDIN_FILENO);
+        close(fd);
+    }
+
+    if (outfile)
+    {
+        int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd < 0)
+        {
+            perror(outfile);
+            exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+
+    if (appfile)
+    {
+        int fd = open(appfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
+        if (fd < 0)
+        {
+            perror(appfile);
+            exit(1);
+        }
+        dup2(fd, STDOUT_FILENO);
+        close(fd);
+    }
+}
+
 void execute_commands()
 {
     if (num_cmds == 1 && is_builtin(cmds[0].cmdargs[0]))
@@ -92,45 +131,6 @@ void execute_commands()
     }
 }
 
-void setup_redirections()
-{
-    if (infile)
-    {
-        int fd = open(infile, O_RDONLY);
-        if (fd < 0)
-        {
-            perror(infile);
-            exit(1);
-        }
-        dup2(fd, STDIN_FILENO);
-        close(fd);
-    }
-
-    if (outfile)
-    {
-        int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd < 0)
-        {
-            perror(outfile);
-            exit(1);
-        }
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-    }
-
-    if (appfile)
-    {
-        int fd = open(appfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
-        if (fd < 0)
-        {
-            perror(appfile);
-            exit(1);
-        }
-        dup2(fd, STDOUT_FILENO);
-        close(fd);
-    }
-}
-
 void execute_pipeline()
 {
     int pipes[MAX_CMDS - 1][2];
@@ -163,11 +163,48 @@ void execute_pipeline()
             signal(SIGTTIN, SIG_DFL);
             signal(SIGTTOU, SIG_DFL);
 
-            if (i > 0)
+            if (i == 0 && infile)
+            {
+                int fd = open(infile, O_RDONLY);
+                if (fd < 0)
+                {
+                    perror(infile);
+                    exit(1);
+                }
+                dup2(fd, STDIN_FILENO);
+                close(fd);
+            }
+            else if (i > 0)
             {
                 dup2(pipes[i - 1][0], STDIN_FILENO);
             }
-            if (i < num_cmds - 1)
+
+            if (i == num_cmds - 1)
+            {
+                if (outfile)
+                {
+                    int fd = open(outfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (fd < 0)
+                    {
+                        perror(outfile);
+                        exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+                else if (appfile)
+                {
+                    int fd = open(appfile, O_WRONLY | O_CREAT | O_APPEND, 0644);
+                    if (fd < 0)
+                    {
+                        perror(appfile);
+                        exit(1);
+                    }
+                    dup2(fd, STDOUT_FILENO);
+                    close(fd);
+                }
+            }
+            else if (i < num_cmds - 1)
             {
                 dup2(pipes[i][1], STDOUT_FILENO);
             }

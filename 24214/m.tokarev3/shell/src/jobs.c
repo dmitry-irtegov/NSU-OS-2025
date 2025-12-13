@@ -4,6 +4,23 @@ static job_t jobs[MAX_JOBS];
 static int job_count = 0;
 pid_t foreground_pgid = 0;
 
+static int find_job_by_id(int job_id)
+{
+    if (job_id <= 0)
+    {
+        return -1;
+    }
+
+    for (int i = 0; i < job_count; i++)
+    {
+        if (jobs[i].job_id == job_id)
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
 void initialize_jobs()
 {
     job_count = 0;
@@ -54,19 +71,15 @@ void check_jobs()
 
     for (int i = 0; i < job_count; i++)
     {
+        if (jobs[i].status == JOB_DONE)
+            continue;
+
         pid = waitpid(-jobs[i].pgid, &status, WNOHANG | WUNTRACED | WCONTINUED);
         if (pid > 0)
         {
             if (WIFEXITED(status) || WIFSIGNALED(status))
             {
-                printf("[%d] Done\t\t%s\n", jobs[i].job_id, jobs[i].command);
-
-                for (int j = i; j < job_count - 1; j++)
-                {
-                    jobs[j] = jobs[j + 1];
-                }
-                job_count--;
-                i--;
+                jobs[i].status = JOB_DONE;
             }
             else if (WIFSTOPPED(status))
             {
@@ -89,6 +102,25 @@ void check_jobs()
                     printf("[%d] Continued\t\t%s\n", jobs[i].job_id, jobs[i].command);
                 }
             }
+        }
+    }
+}
+
+void print_done_jobs()
+{
+    for (int i = 0; i < job_count; i++)
+    {
+        if (jobs[i].status == JOB_DONE)
+        {
+            printf("[%d] Done\t\t%s\n", jobs[i].job_id, jobs[i].command);
+
+            // Remove job
+            for (int j = i; j < job_count - 1; j++)
+            {
+                jobs[j] = jobs[j + 1];
+            }
+            job_count--;
+            i--;
         }
     }
 }
@@ -180,23 +212,6 @@ void set_job_status(pid_t pid, job_status_t status)
     }
 }
 
-int find_job_by_id(int job_id)
-{
-    if (job_id <= 0)
-    {
-        return -1;
-    }
-
-    for (int i = 0; i < job_count; i++)
-    {
-        if (jobs[i].job_id == job_id)
-        {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void cleanup_jobs()
 {
     printf("Terminating background jobs...\n");
@@ -228,6 +243,7 @@ void cleanup_jobs()
 
 void print_jobs()
 {
+    check_jobs();
     if (job_count == 0)
     {
         printf("No active jobs.\n");
@@ -246,18 +262,21 @@ void print_jobs()
             status_str = "Stopped";
             break;
         case JOB_DONE:
-            status_str = "Done";
+            status_str = NULL;
             break;
         default:
             status_str = "Unknown";
             break;
         }
 
-        printf("[%d] %s\t\t%s (pgid %d)\n",
-               jobs[i].job_id,
-               status_str,
-               jobs[i].command,
-               jobs[i].pgid);
+        if (status_str)
+        {
+            printf("[%d] %s\t\t%s (pgid %d)\n",
+                   jobs[i].job_id,
+                   status_str,
+                   jobs[i].command,
+                   jobs[i].pgid);
+        }
     }
 }
 

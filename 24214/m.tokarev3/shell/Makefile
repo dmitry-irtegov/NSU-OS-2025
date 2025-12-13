@@ -2,7 +2,7 @@ CC = gcc
 
 CFLAGS = -g -Wall -I$(INCDIR)
 LDFLAGS =
-LIBS =
+LIBS = -lreadline
 
 RM = rm -f
 RMDIR = rm -rf

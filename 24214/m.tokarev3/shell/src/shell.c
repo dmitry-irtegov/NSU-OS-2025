@@ -12,19 +12,52 @@ int shell_terminal;
 int shell_is_interactive;
 pid_t shell_pgid;
 
-void print_prompt()
+char *get_prompt()
 {
+    static char prompt[MAX_LINE];
     char *pwd = getenv("PWD");
     char *user = getenv("USER");
     if (user && pwd)
     {
-        printf("%s:%s ", user, pwd);
+        snprintf(prompt, MAX_LINE, "%s:%s ", user, pwd);
     }
     else
     {
-        printf("[%s] ", DEFAULT_SHELL_NAME);
+        snprintf(prompt, MAX_LINE, "[%s] ", DEFAULT_SHELL_NAME);
     }
-    fflush(stdout);
+    return prompt;
+}
+
+void clear_globals()
+{
+    if (infile)
+    {
+        free(infile);
+        infile = NULL;
+    }
+    if (outfile)
+    {
+        free(outfile);
+        outfile = NULL;
+    }
+    if (appfile)
+    {
+        free(appfile);
+        appfile = NULL;
+    }
+    bkgrnd = 0;
+    num_cmds = 0;
+    for (int i = 0; i < MAX_CMDS; i++)
+    {
+        for (int j = 0; j < MAX_ARGS; j++)
+        {
+            if (cmds[i].cmdargs[j])
+            {
+                free(cmds[i].cmdargs[j]);
+                cmds[i].cmdargs[j] = NULL;
+            }
+        }
+    }
 }
 
 void init_shell()
@@ -59,7 +92,7 @@ void init_shell()
 
 int main(int argc, char **argv)
 {
-    char line[MAX_LINE];
+    char *line;
     struct sigaction sa;
 
     init_shell();
@@ -89,45 +122,50 @@ int main(int argc, char **argv)
     while (1)
     {
         check_jobs();
+        print_done_jobs();
 
-        print_prompt();
+        line = readline(get_prompt());
 
-        if (fgets(line, MAX_LINE, stdin) == NULL)
+        if (!line)
         {
-            if (feof(stdin))
+            printf("\n");
+            cleanup_jobs();
+            printf("Goodbye!\n");
+            break;
+        }
+
+        if (*line)
+            add_history(line);
+
+        char *next_cmd = line;
+        while (next_cmd && *next_cmd)
+        {
+            num_cmds = parseline(&next_cmd);
+
+            if (num_cmds == -1)
             {
-                printf("\n");
-                cleanup_jobs();
-                printf("Goodbye!\n");
+                fprintf(stderr, "Parsing error\n");
                 break;
             }
-            else if (ferror(stdin))
+
+            if (num_cmds == 0)
             {
-                clearerr(stdin);
-                continue;
+                break;
+            }
+
+            if (is_builtin(cmds[0].cmdargs[0]))
+            {
+                if (execute_builtin())
+                {
+                    free(line);
+                }
+            }
+            else
+            {
+                execute_commands();
             }
         }
-
-        num_cmds = parseline(line);
-
-        if (num_cmds == -1)
-        {
-            fprintf(stderr, "Parsing error\n");
-            continue;
-        }
-
-        if (num_cmds == 0)
-        {
-            continue;
-        }
-
-        if (is_builtin(cmds[0].cmdargs[0]))
-        {
-            execute_builtin();
-            continue;
-        }
-
-        execute_commands();
+        free(line);
     }
 
     return 0;
