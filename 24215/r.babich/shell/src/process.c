@@ -14,13 +14,13 @@ process_t *process_init(process_t *process, pid_t pid) {
 	return process;
 }
 
-void launch_process(command_t *command, int infile, int outfile, int appfile, bool foreground) {
-	if (setpgid(0, 0)){
+void launch_process(command_t *command, pid_t pgid, int infile, int outfile, bool foreground) {
+	if (setpgid(0, pgid)){
 		perror("Failed to set pgid");
 		exit(1);
 	}
 
-	if (foreground){
+	if (foreground && pgid == 0) {
 		if (tcsetpgrp(0, getpgrp())){
 			perror("Failed to set terminal foreground process group");
 			exit(1);
@@ -40,10 +40,6 @@ void launch_process(command_t *command, int infile, int outfile, int appfile, bo
   	dup2(outfile, STDOUT_FILENO);
     close(outfile);
 	}
-  if (appfile != STDOUT_FILENO) {
-  	dup2(appfile, STDOUT_FILENO);
-    close(appfile);
-  } 
 	execvp(command->cmdargs[0], command->cmdargs);
 	perror("Execvp failed.");
 	exit(1);

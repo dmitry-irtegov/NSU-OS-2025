@@ -14,7 +14,7 @@ typedef struct process_t {
 	process_status_t status;
 } process_t;
 
-void launch_process(command_t *command, int infile, int outfile, int appfile, bool foreground);
+void launch_process(command_t *command, pid_t pgid, int infile, int outfile, bool foreground);
 
 void update_process_status(process_t *process, int status);
 

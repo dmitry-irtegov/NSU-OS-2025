@@ -30,51 +30,77 @@ job_t *job_init() {
 	tcgetattr(STDIN_FILENO, &job->term_attrs);
 	
 	return job;
-}
+ }
 
 void launch_job(job_list_t *list, job_t *job, pipeline_t *pipeline) {
-	int job_infile_fd = STDIN_FILENO, job_outfile_fd = STDOUT_FILENO, job_appfile_fd = STDOUT_FILENO;
+	int mypipe[2], infile = STDIN_FILENO, outfile;
+	mypipe[0] = -1;
+	mypipe[1] = -1;
 
 	if (pipeline->infile) {
-		job_infile_fd = open(pipeline->infile, O_RDONLY);
-		if (job_infile_fd < 0) {
-			perror("Failed to open file.");
-			exit(1);
-		}
-	}	
-	if (pipeline->outfile) {
-		job_outfile_fd = open(pipeline->outfile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-		if (job_outfile_fd < 0) {
-			perror("Failed to open file.");
-			exit(1);
-		}
-	}
-	if (pipeline->appfile) {
-		job_appfile_fd = open(pipeline->appfile, O_WRONLY | O_CREAT | O_APPEND, 0666);
-		if (job_appfile_fd < 0) {
+		infile = open(pipeline->infile, O_RDONLY);
+		if (infile == -1) {
 			perror("Failed to open file.");
 			exit(1);
 		}
 	}
 
-	pid_t pid = fork();
-	switch(pid) {
-		case -1:
-			perror("Failed to launch child process");
-			exit(1);
-		case 0:
-			launch_process(pipeline->cmds, job_infile_fd, job_outfile_fd, job_appfile_fd, pipeline->foreground);
-		default:
-			setpgid(pid, pid);
-			process_init(job->processes, pid);
-			job->process_count++;
-			job->pgid = pid;
-
-			if (pipeline->foreground) {
-				put_job_in_fg(list, job, 0);
-			} else {
-    		fprintf(stderr, "Background pid [%d]\n",job->pgid);
+	for (int i = 0; i < pipeline->cmd_count; i++) {
+		if (i + 1 < pipeline->cmd_count) {
+			if (pipe(mypipe)) {
+				perror("Failed to setup pipe");
+				exit(1);
 			}
+			outfile = mypipe[1];
+		} else {
+			outfile = STDOUT_FILENO;
+		}
+
+		if (i == pipeline->cmd_count - 1 && (pipeline->outfile || pipeline->appfile)) {
+			if (pipeline->outfile) {
+				outfile = open(pipeline->outfile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+			} else {
+				outfile = open(pipeline->appfile, O_WRONLY | O_CREAT | O_APPEND, 0666);
+			}
+			if (outfile < 0) {
+				perror("Failed to open file.");
+				exit(1);
+			}
+		}
+		pid_t pid = fork();
+		switch(pid) {
+			case -1:
+				perror("Failed to launch child process");
+				exit(1);
+			case 0:
+				if (mypipe[0] != -1 && mypipe[0] != infile) {
+					close(mypipe[0]);
+				}
+				if (mypipe[1] != -1 && mypipe[1] != outfile) {
+					close(mypipe[1]);
+				}
+
+				launch_process(&pipeline->cmds[i], job->pgid, infile, outfile, pipeline->foreground);
+			default:
+				if (job->pgid == 0) {
+					job->pgid = pid;
+				}
+				setpgid(pid, job->pgid);
+				process_init(&job->processes[i], pid);
+				job->process_count++;
+				if (infile != STDIN_FILENO) {
+        	close(infile);
+				}
+      	if (outfile != STDOUT_FILENO) {
+        	close(outfile);
+				}
+				infile = mypipe[0];
+			}
+	}
+	if (pipeline->foreground) {
+		put_job_in_fg(list, job, 0);
+	} else {
+    fprintf(stderr, "Background pid [%d]\n",job->pgid);
 	}
 }
 
@@ -126,16 +152,18 @@ void check_background_jobs(job_list_t *list) {
 }
 
 void update_job_status(job_t *job, int status) {
-	update_process_status(&job->processes[0], status);
-	switch (job->processes[0].status) {
-		case PROCESS_STOPPED:
-			job->status = JOB_STOPPED;
-			break;
-		case PROCESS_COMPLETED:
-			job->status = JOB_DONE;
-			break;
-		default:
-			job->status = JOB_RUNNING;
+	job->status = JOB_DONE;
+	for (int i = 0; i < job->process_count; i++) {
+		update_process_status(&job->processes[i], status);
+		switch (job->processes[i].status) {
+			case PROCESS_STOPPED:
+				job->status = JOB_STOPPED;
+				break;
+			case PROCESS_COMPLETED:
+				continue;
+			default:
+				job->status = JOB_RUNNING;
+		}
 	}
 }
 
