@@ -81,9 +81,10 @@ job_t *get_job_by_spec(char *spec) {
     }
 }
 
-void add_job(pid_t pgid, int nprocs, pid_t pids[], char *cmdline) {
+void add_job(pid_t pgid, int bkgrnd, int nprocs, pid_t pids[], char *cmdline) {
     job_t *j = malloc(sizeof(job_t));
     j->pgid = pgid;
+    j->bkgrnd = bkgrnd;
     j->jid = job_counter++;
     j->state = 'R';
     j->cmdline = cmdline;
@@ -174,6 +175,9 @@ void update_job_status() {
             j->state = 'S';
             fprintf(stderr, "\n[%d] Stopped\n", j->jid);
         } else if (WIFEXITED(status)) {
+            if (!j->bkgrnd) {
+                continue;
+            }
             fprintf(stderr, "\n[%d] Terminated\n", j->jid);
             remove_job(j->pgid);
         }

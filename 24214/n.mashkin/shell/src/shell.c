@@ -35,6 +35,10 @@ void sigtstp_handler(int sig) {
     }
 }
 
+void sigchld_handler(int sig) {
+    update_job_status();
+}
+
 int builtin_cmd(command_t *cmd) {
     if (!cmd->cmdargs[0]) return 0;
     
@@ -196,7 +200,7 @@ void launch_pipeline(pipeline_t ppline, char *cmdline) {
     }
     
     if (pipeline_pgid > 0) {
-        add_job(pipeline_pgid, ppline.ncmds, pids, cmdline_copy);
+        add_job(pipeline_pgid, ppline.bkgrnd, ppline.ncmds, pids, cmdline_copy);
     }
 
     #ifdef DEBUG
@@ -228,6 +232,10 @@ int main() {
     tcsetpgrp(terminal_fd, shell_pgid);
     
     struct sigaction sa;
+    sa.sa_handler = sigchld_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    sigaction(SIGCHLD, &sa, NULL);
     sa.sa_handler = sigint_handler;
     sigaction(SIGINT, &sa, NULL);
     sa.sa_handler = sigtstp_handler;
