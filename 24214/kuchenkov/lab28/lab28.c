@@ -25,13 +25,20 @@ int main() {
         fprintf(fp[0], "%d\n", num);
     }
 
+    fclose(fp[0]);
+
     int num;
+    int count = 0;
 
     while (fscanf(fp[1], "%d", &num) == 1) {
         printf("%02d ", num);
+        if (count % 10 == 9) {
+            printf("\n");
+        }
+        count++;
     }
 
-    p2close();
+    p2close(fp);
     
     return 0;
 }
