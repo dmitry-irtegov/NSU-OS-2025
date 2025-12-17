@@ -75,5 +75,5 @@ int main(int argc, char** argv) {
         
         printf("%.24s %s\n", ctime(&sbuf.st_mtime), basename(argv[files]));
     }
-    exit(0);
+    return 0;
 }
