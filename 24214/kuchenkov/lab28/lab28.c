@@ -11,17 +11,24 @@ p2open(3), чтобы запустить sort(1) и rand(3) и srand(3) для �
 */
 
 int main() {
+    FILE *fp[2];
 
     srand(time(NULL));
 
-    if (p2open("sort -n", "w") == NULL) {
+    if (p2open("sort -n", fp) == -1) {
         perror("p2open failed");
         return 1;
     }
 
     for (int i = 0; i < 100; i++) {
         int num = rand() % 100;
-        printf("%d\n", num);
+        fprintf(fp[0], "%d\n", num);
+    }
+
+    int num;
+
+    while (fscanf(fp[1], "%d", &num) == 1) {
+        printf("%02d ", num);
     }
 
     p2close();
