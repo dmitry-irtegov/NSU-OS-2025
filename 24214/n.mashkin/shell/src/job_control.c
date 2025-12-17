@@ -175,11 +175,12 @@ void update_job_status() {
             j->state = 'S';
             fprintf(stderr, "\n[%d] Stopped\n", j->jid);
         } else if (WIFEXITED(status)) {
+            int jid = j->jid;
+            remove_job(j->pgid);
             if (!j->bkgrnd) {
                 continue;
             }
-            fprintf(stderr, "\n[%d] Terminated\n", j->jid);
-            remove_job(j->pgid);
+            fprintf(stderr, "\n[%d] Terminated\n", jid);
         }
     }
 }
