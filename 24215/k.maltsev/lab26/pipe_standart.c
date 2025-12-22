@@ -7,7 +7,7 @@ int main() {
     FILE *fp;
     char msgout[MSGSIZE] = "Hello, World! I love Osi!";
 
-    printf("Обработанное сообщение:\n");
+    printf("Processed message:\n");
 
     if ((fp = popen("tr '[:lower:]' '[:upper:]'", "w")) == NULL) {
         perror("popen");
