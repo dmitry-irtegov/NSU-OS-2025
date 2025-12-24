@@ -4,36 +4,41 @@
 #include <dirent.h>
 #include <sys/types.h>
 
-int pattern_match(const char *pattern, const char *string) {
-    if (*pattern == '\0') {
-        return *string == '\0';
-    }
+static int pattern_match(const char *pattern, const char *string) {
+    const char *p = pattern;
+    const char *s = string;
+    const char *star = NULL;
+    const char *ss = NULL;
 
-    if (*pattern == '*') {
-        if (pattern_match(pattern + 1, string)) {
-            return 1;
+    while (*s != '\0') {
+        if (*p == *s || *p == '?') {
+            p++;
+            s++;
+            continue;
         }
-        if (*string != '\0' && pattern_match(pattern, string + 1)) {
-            return 1;
+
+        if (*p == '*') {
+            star = p;
+            p++;
+            ss = s;
+            continue;
         }
+
+        if (star != NULL) {
+            p = star + 1;
+            ss++;
+            s = ss;
+            continue;
+        }
+
         return 0;
     }
 
-    if (*pattern == '?') {
-        if (*string == '\0') {
-            return 0;
-        }
-        return pattern_match(pattern + 1, string + 1);
-    }
-
-    if (*pattern == *string) {
-        return pattern_match(pattern + 1, string + 1);
-    }
-
-    return 0;
+    while (*p == '*') p++;
+    return *p == '\0';
 }
 
-int main() {
+int main(void) {
     char pattern[1024];
     DIR *d;
     struct dirent *dir;
@@ -66,6 +71,7 @@ int main() {
             found_flag = 1;
         }
     }
+
     closedir(d);
 
     if (!found_flag) {
