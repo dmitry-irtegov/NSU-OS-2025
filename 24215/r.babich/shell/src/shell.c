@@ -1,4 +1,3 @@
-#include <sys/types.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/wait.h>
@@ -10,13 +9,15 @@
 #include "job.h"
 #include "job_list.h"
 #include "pipeline.h"
-
+#include "history.h"
 
 int main(int argc, char *argv[]) {
 	char line[1024];	
 	char prompt[50];
 	job_list_t list;
 	job_list_init(&list);
+	history_t history;
+	history_init(&history);	
 
 	signal(SIGINT, SIG_IGN);
   signal(SIGQUIT, SIG_IGN);
@@ -25,13 +26,13 @@ int main(int argc, char *argv[]) {
 	
 	sprintf(prompt, "[%s] ", argv[0]);
 
-	while (promptline(prompt, line, sizeof(line)) > 0) {
+	while (promptline(prompt, line, sizeof(line), &history) > 0) {
 		static pipeline_t pipeline;
-    check_background_jobs(&list);
-
+		check_background_jobs(&list);
 		if (parse_pipeline(line, &pipeline) <= 0) {
     	continue;
     }
+
 		if (try_execute_builtin(&pipeline, &list)) {
 			continue;
 		}
@@ -43,6 +44,7 @@ int main(int argc, char *argv[]) {
 		job_list_add(&list, job);
 		launch_job(&list, job, &pipeline);
 	}
+	free_history(&history);
 	return 0;
 }
 

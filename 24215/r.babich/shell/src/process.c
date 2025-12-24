@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <signal.h>
+#include <sys/wait.h>
 
 process_t *process_init(process_t *process, pid_t pid) {
 	*process = (process_t) {

@@ -1,4 +1,5 @@
 #pragma once
+#include "history.h"
 #include <stdbool.h>
 
 #define MAXARGS 256
@@ -23,5 +24,5 @@ typedef struct {
 } pipeline_t;
 
 int parse_pipeline(char*, pipeline_t *pipeline);
-int promptline(char*, char*, int);
+int promptline(char*, char*, int, history_t *history);
 
