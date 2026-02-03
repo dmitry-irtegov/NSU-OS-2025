@@ -7,7 +7,7 @@ void* thread_body(void* param) {
     (void)param;
 
     while (1) {
-        write(1, "Child\n", 6);
+        printf("child\n");
     }
 
     return NULL;
