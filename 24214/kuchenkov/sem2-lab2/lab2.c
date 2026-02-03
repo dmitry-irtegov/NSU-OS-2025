@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 
-void* ten_strings(void* arg) {
+void* ten_strings() {
     for (int i = 0; i < 9; i++) {
         printf("Ten strings.\n");
     }
