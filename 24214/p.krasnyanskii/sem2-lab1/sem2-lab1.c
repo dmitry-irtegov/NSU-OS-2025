@@ -2,9 +2,9 @@
 #include <pthread.h>
 #include <unistd.h>
 
-void* thread_func(void* arg) {
+void* child_thread(void* arg) {
     for (int i = 0; i < 10; i++) {
-        printf("Child thread: line %d\n", i + 1);
+        printf("Child thread: %d\n", i + 1);
         usleep(100000);
     }
     return NULL;
@@ -13,10 +13,13 @@ void* thread_func(void* arg) {
 int main() {
     pthread_t tid;
 
-    pthread_create(&tid, NULL, thread_func, NULL);
+    if (pthread_create(&tid, NULL, child_thread, NULL) != 0) {
+        perror("pthread_create");
+        return 1;
+    }
 
     for (int i = 0; i < 10; i++) {
-        printf("Parent thread: line %d\n", i + 1);
+        printf("Parent thread: %d\n", i + 1);
         usleep(100000);
     }
 
