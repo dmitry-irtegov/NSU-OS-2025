@@ -8,7 +8,7 @@ pthread_mutex_t m_sync;
 pthread_mutex_t m_parent;
 pthread_mutex_t m_child;
 
-void* child(void* arg) {
+void* child() {
     pthread_mutex_lock(&m_child);
 
     for (int i = 0; i < NUM_LINES; i++) {
