@@ -8,6 +8,7 @@ void print_lines(const char* thread_name) {
 }
 
 void* thread_routine(void* arg) {
+    (void) arg;
     print_lines("Дочерняя нить");
     return NULL;
 }
