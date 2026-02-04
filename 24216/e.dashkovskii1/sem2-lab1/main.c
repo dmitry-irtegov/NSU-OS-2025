@@ -28,7 +28,11 @@ int main() {
     }
 
     print_all_lines("parent");
-    pthread_join(tid, NULL);
+    
+    result = pthread_join(tid, NULL);
+    if (result != 0) {
+        handle_error_en(result, "pthread_join");
+    }
 
-    return 0;
+    exit(EXIT_SUCCESS);
 }
