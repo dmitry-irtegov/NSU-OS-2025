@@ -18,12 +18,13 @@ int main() {
         printf("Error with thread creating");
         return EXIT_FAILURE;
     }
-    pthread_join(thread, NULL);
+
 
     for (int i = 1; i <= 10; i++) {
         printf("parent line %d\n", i);
     }
 
+    pthread_join(thread, NULL);
 
     return 0;
 }
