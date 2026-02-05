@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <pthread.h>
+#include <string.h>
 
 void print_lines(const char* thread_name) {
     for (int i = 1; i <= 10; i++) {
@@ -15,14 +16,17 @@ void* thread_routine(void* arg) {
 
 int main() {
     pthread_t thr;
-
-    if (pthread_create(&thr, NULL, thread_routine, NULL) != 0) {
-        perror("Error creating thread");
-        return 1;
+    int status;
+    status = pthread_create(&thr, NULL, thread_routine, NULL);
+    if  (status != 0) {
+        fprintf(stderr, "Ошибка создания потока: %s\n", strerror(status));
+        pthread_exit(NULL);
     }
 
     print_lines("Родительская нить");
-
-    pthread_join(thr, NULL);
-    return 0;
+    status = pthread_join(thr, NULL);
+    if(status != 0) {
+        fprintf(stderr, "Ошибка при ожидании потока (join): %s\n", strerror(status));
+    }
+    pthread_exit(NULL);
 }
