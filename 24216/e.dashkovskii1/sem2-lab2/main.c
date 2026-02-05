@@ -15,6 +15,7 @@ void *print_lines(void *arg) {
     (void)arg;
     print_all_lines("thread");
     pthread_exit(NULL);
+    return NULL;
 }
 
 int main() {
