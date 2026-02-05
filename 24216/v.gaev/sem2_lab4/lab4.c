@@ -7,9 +7,8 @@
 void* child_task(void* arg) {
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-
     while (1) {
-        printf("-> Дочерняя нить: я работаю...\n");
+        printf("Дочерняя нить: работает\n");
         sleep(1); 
     }
     return NULL;
@@ -20,7 +19,7 @@ int main() {
     void* result;
     int s;
 
-    printf("Родитель: Создание нити...\n");
+    printf("Родительская нить: Создание нити\n");
     s = pthread_create(&thread_id, NULL, child_task, NULL);
     if (s != 0) {
         errno = s; 
@@ -29,7 +28,7 @@ int main() {
     }
     sleep(2);
 
-    printf("Родитель: Отправка сигнала отмены...\n");
+    printf("Родительская нить: Отправка сигнала отмены\n");
     s = pthread_cancel(thread_id);
     if (s != 0) {
         errno = s;
@@ -45,9 +44,9 @@ int main() {
     }
 
     if (result == PTHREAD_CANCELED) {
-        printf("Родитель: Нить была корректно отменена.\n");
+        printf("Родительская нить: Нить была корректно отменена.\n");
     } else {
-        printf("Родитель: Странно, нить завершилась сама (чего не должно быть).\n");
+        printf("Родительская нить: Нить завершилась сама. \n");
     }
 
     return 0;
