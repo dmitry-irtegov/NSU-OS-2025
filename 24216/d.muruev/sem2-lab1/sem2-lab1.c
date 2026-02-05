@@ -15,7 +15,7 @@ int main() {
     int result = pthread_create(&thread, NULL, print_10_lines, NULL);
     if (result != 0) {
         fprintf(stderr, "Error creating thread: %s\n", strerror(result));
-        exit(1);
+        exit(EXIT_FAILURE);
     }
     for (int i = 0; i < 10; i++) {
         printf("main thread\n");
