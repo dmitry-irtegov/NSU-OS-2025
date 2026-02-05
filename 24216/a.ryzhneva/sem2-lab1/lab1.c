@@ -3,12 +3,17 @@
 #include <string.h>
 #include <stdlib.h>
 
-void* thread_body(void* param) {
+void print_text(const char* text) {
     for(int i = 0; i < 10; i++) {
-        printf("Child\n");
+        printf("%s\n", text);
     }
+}
+
+void* thread_body(void* param) {
+    print_text("Child");
     return NULL;
 }
+
 int main(int argc, char* argv[]) {
     pthread_t thread;
     int code;
@@ -21,9 +26,7 @@ int main(int argc, char* argv[]) {
         exit(1);
     }
 
-    for(int i = 0; i < 10; i++) {
-        printf("Parent\n");
-    }
+    print_text("Parent");
 
     pthread_exit(NULL);
 }
