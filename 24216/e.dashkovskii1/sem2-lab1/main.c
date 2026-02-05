@@ -5,7 +5,7 @@
 
 #define handle_error_en(en, msg) do {errno = en; perror(msg); exit(EXIT_FAILURE); } while(0)
 
-void print_all_lines(char* string) {
+void print_all_lines(const char* string) {
     for (int i = 0; i < 10; i++) {
         printf("%s\n", string);
     }
@@ -15,6 +15,7 @@ void *print_lines(void *arg) {
     (void)arg;
     print_all_lines("thread");
     pthread_exit(NULL);
+    return NULL;
 }
 
 int main() {
