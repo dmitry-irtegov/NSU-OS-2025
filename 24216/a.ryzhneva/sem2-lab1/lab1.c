@@ -5,7 +5,7 @@
 
 void print_text(const char* text) {
     for(int i = 0; i < 10; i++) {
-        printf("%s\n", text);
+        fprintf(stderr, "%s\n", text);
     }
 }
 
