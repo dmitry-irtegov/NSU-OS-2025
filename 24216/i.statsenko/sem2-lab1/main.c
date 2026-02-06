@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *printStrings(void *) {
+void *printStrings(void *unused) {
     for (int i = 0; i < 10; i++) {
         fprintf(stderr, "Thread: Iteration %d\n", i);
     }
