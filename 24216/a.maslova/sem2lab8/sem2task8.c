@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #define NUM_STEPS 100000000
 
@@ -30,7 +31,19 @@ void* thread_func(void* arg) {
 int main(int argc, char** argv) {
     if (argc != 2) return 1;
     
+    char* arg = argv[1];
+    for (int i = 0; arg[i] != '\0'; i++) {
+        if (!isdigit(arg[i])) {
+            fprintf(stderr, "Error: '%s' It is not number\n", arg);
+            return 1;
+        }
+    }
+
     int n = atoi(argv[1]);
+    if (n <= 0) {
+        fprintf(stderr, "The numbers of treads must be positive\n");
+        return 1;  
+    }
     pthread_t threads[n];
     struct thread_args args[n];
     double pi = 0.0;
