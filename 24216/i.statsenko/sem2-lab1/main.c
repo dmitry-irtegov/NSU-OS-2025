@@ -3,11 +3,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-void *printStrings(void *unused) {
+void *printStrings(void *) {
     for (int i = 0; i < 10; i++) {
-        printf("Thread: Iteration %d\n", i);
+        fprintf(stderr, "Thread: Iteration %d\n", i);
     }
-    fflush(stdout);
     pthread_exit(NULL);
 }
 
