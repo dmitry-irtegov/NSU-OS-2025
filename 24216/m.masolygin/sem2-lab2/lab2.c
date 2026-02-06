@@ -5,7 +5,7 @@
 
 void print_lines(char* str) {
     for (int i = 1; i <= 10; i++) {
-        printf("%s %d\n", str, i);
+        fprintf(stderr, "%s %d\n", str, i);
     }
 }
 
