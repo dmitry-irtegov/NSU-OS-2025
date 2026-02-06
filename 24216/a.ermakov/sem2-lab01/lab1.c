@@ -4,7 +4,7 @@
 
 void print_lines(const char* thread_name) {
     for (int i = 1; i <= 10; i++) {
-        printf("%s: строка %d\n", thread_name, i);
+        fprintf(stderr, "%s: строка %d\n", thread_name, i);
     }
 }
 
@@ -20,13 +20,14 @@ int main() {
     status = pthread_create(&thr, NULL, thread_routine, NULL);
     if  (status != 0) {
         fprintf(stderr, "Ошибка создания потока: %s\n", strerror(status));
-        pthread_exit(NULL);
+        return 1;
     }
 
     print_lines("Родительская нить");
     status = pthread_join(thr, NULL);
     if(status != 0) {
         fprintf(stderr, "Ошибка при ожидании потока (join): %s\n", strerror(status));
+        return 1;
     }
-    pthread_exit(NULL);
+    return 0;
 }
