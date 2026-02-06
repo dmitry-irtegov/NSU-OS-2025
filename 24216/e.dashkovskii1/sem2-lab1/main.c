@@ -3,16 +3,16 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>  
-
-#define handle_error_en(en, msg) do {errno = en; perror(msg); exit(EXIT_FAILURE); } while(0)
+#include <string.h>
+#define handle_error_en(en, msg) do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
 
 void print_all_lines(const char* string) {
     char buffer[256];
+
     int len = snprintf(buffer, sizeof(buffer), "%s\n", string);
     
     for (int i = 0; i < 10; i++) {
-        write(STDOUT_FILENO, buffer, len);
+        write(STDERR_FILENO, buffer, len);
     }
 }
 
@@ -27,13 +27,12 @@ int main() {
     int result;
 
     result = pthread_create(&tid, NULL, &print_lines, NULL);
-
     if (result != 0) {
         handle_error_en(result, "pthread_create");
     }
 
     print_all_lines("parent");
-    
+
     result = pthread_join(tid, NULL);
     if (result != 0) {
         handle_error_en(result, "pthread_join");
