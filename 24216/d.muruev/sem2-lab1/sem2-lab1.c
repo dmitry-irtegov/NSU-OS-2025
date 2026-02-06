@@ -5,7 +5,7 @@
 
 void* print_10_lines(void *arg) {
     for (int i = 0; i < 10; i++) {
-        printf("new thread\n");
+        fprintf(stderr, "new thread\n");
     }
     return NULL;
 }
@@ -18,7 +18,7 @@ int main() {
         exit(EXIT_FAILURE);
     }
     for (int i = 0; i < 10; i++) {
-        printf("main thread\n");
+        fprintf(stderr, "main thread\n");
     }
     pthread_exit(NULL);
 }
