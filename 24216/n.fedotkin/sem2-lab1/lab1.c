@@ -5,7 +5,7 @@
 
 void* thread_printer(void *arg) {
     for (int i = 0; i < 10; i++) {
-        printf("Child thread: %d\n", i);
+        fprintf(stderr, "Child thread: %d\n", i);
     }
     return NULL;
 }
@@ -20,7 +20,7 @@ int main() {
     }
 
     for (int i = 0; i < 10; i++) {
-        printf("Main thread: %d\n", i);
+        fprintf(stderr, "Main thread: %d\n", i);
     }
 
     result = pthread_join(thread, NULL);
