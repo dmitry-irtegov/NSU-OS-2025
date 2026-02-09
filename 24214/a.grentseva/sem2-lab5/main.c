@@ -3,11 +3,17 @@
 #include <unistd.h>
 #include <errno.h>
 
-void* child_thread(void* arg) {
+void cleanup_handler() {
+    printf("child thread is cleaning up before exit\n");
+}
+
+void* child_thread() {
+    pthread_cleanup_push(cleanup_handler, NULL);
     while (1) {
         printf("child thread is writing\n");
-        sleep(1);  
+        sleep(1);   
     }
+    pthread_cleanup_pop(0); 
     return NULL;
 }
 
