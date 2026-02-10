@@ -19,8 +19,8 @@ int main() {
     pthread_t thread;
     int status;
 
-    sem_init(&sem_child, 0, 1);
-    sem_init(&sem_parent, 0, 0);
+    sem_init(&sem_child, 0, 0);
+    sem_init(&sem_parent, 0, 1);
 
     status = pthread_create(&thread, NULL, printer, NULL);
     if (status != 0) {
