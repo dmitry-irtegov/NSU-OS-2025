@@ -28,4 +28,5 @@ int main() {
         exit(EXIT_FAILURE);
     }
     printStrings();
+    return 0;
 }
