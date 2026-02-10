@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-void* thread_routine(void* arg) {
+void* thread_routine() {
     for (int i = 1; i <= 10; i++) {
         printf("нить-ребёнок: строка %d\n", i);
     }
     return NULL;
 }
 
-int main(int argc, char* argv[]) {
+int main() {
     pthread_t thread;
     int result;
     result = pthread_create(&thread, NULL, thread_routine, NULL);
