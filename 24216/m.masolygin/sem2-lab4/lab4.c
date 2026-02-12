@@ -7,6 +7,7 @@
 #define str "Child string\n"
 
 void* print_line(void* arg) {
+    (void)arg;
     while (1) {
         write(STDOUT_FILENO, str, strlen(str));
         sleep(1);
