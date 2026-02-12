@@ -8,7 +8,7 @@ void* thread_body(void* param) {
     const char** arr = (const char**)param;
 
     for (int i = 0; arr[i] != NULL; i++) {
-        printf("%s\n", arr[i]);
+        fprintf(stderr, "%s\n", arr[i]);
     }
 
     return NULL;
