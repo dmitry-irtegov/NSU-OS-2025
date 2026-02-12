@@ -12,7 +12,7 @@ volatile bool running = true;
 void check_error(int result, const char *msg) {
     if (result != 0) {
         fprintf(stderr, "%s: %s\n", msg, strerror(result));
-        exit(EXIT_FAILURE);
+        exit(1);
     }
 }
 
