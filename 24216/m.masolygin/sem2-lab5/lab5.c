@@ -8,10 +8,12 @@
 #define str_clean "Called clean-up handler\n"
 
 void cleanup_handler(void* arg) {
+    (void)arg;
     write(STDOUT_FILENO, str_clean, strlen(str_clean));
 }
 
 void* print_line(void* arg) {
+    (void)arg;
     pthread_cleanup_push(cleanup_handler, NULL);
     while (1) {
         write(STDOUT_FILENO, str, strlen(str));
