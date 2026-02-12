@@ -17,7 +17,12 @@ int main() {
         fprintf(stderr, "Error creating thread: %s\n", strerror(result));
         exit(EXIT_FAILURE);
     }
-    pthread_join(thread, NULL);
+    
+    int join_result = pthread_join(thread, NULL);
+    if (join_result != 0) {
+        fprintf(stderr, "Error joining thread: %s\n", strerror(join_result));
+        exit(EXIT_FAILURE);
+    }
     for (int i = 0; i < 10; i++) {
         fprintf(stderr, "main thread\n");
     }
