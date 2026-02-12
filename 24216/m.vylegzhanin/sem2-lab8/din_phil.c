@@ -66,28 +66,26 @@ philosopher (void *num)
      * philosophers may be able to eat their dishes and 
      * not deadlock.
      */
-    if (id == 1){
-      sleep (sleep_seconds);
+    if (id == 1) sleep (sleep_seconds);
 
-      printf ("Philosopher %d: get dish %d.\n", id, f);
+    printf ("Philosopher %d: get dish %d.\n", id, f);
 
-      /* Теперь стратегия брать две вилки сразу либо не брать вовсе */
-      if (pthread_mutex_trylock(&forks[right_fork]) == 0 && pthread_mutex_trylock(&forks[left_fork]) == 0) {
-          get_fork (id, right_fork, "right");
-          get_fork (id, left_fork, "left ");
-
-          printf ("Philosopher %d: eating.\n", id);
-          usleep (DELAY * (FOOD - f + 1));
-          down_forks (left_fork, right_fork);
-        } else {
-          /* Failed to get left fork, release right */
-          pthread_mutex_unlock(&forks[right_fork]);
-          usleep (DELAY * (FOOD - f + 1));
-        }
-    } else {
-      /* Failed to get right fork */
-      usleep (DELAY * (FOOD - f + 1));
+    int flag1 = 0, flag2 = 0;
+    if (pthread_mutex_trylock(&forks[right_fork]) == 0) flag1 = 1;
+    if (pthread_mutex_trylock(&forks[left_fork]) == 0) flag2 = 1;
+    
+    if (flag1 && flag2){
+      get_fork (id, right_fork, "right");
+      get_fork (id, left_fork, "left ");
+      printf ("Philosopher %d: eating.\n", id);
+      down_forks (left_fork, right_fork);
+    }else if(flag1){
+      pthread_mutex_unlock(&forks[right_fork]);
+    }else{
+      pthread_mutex_unlock(&forks[left_fork]);
     }
+
+    usleep (DELAY * (FOOD - f + 1));
   }
   printf ("Philosopher %d is done eating.\n", id);
   return (NULL);
