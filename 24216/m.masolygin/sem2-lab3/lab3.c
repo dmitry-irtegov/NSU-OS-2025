@@ -4,10 +4,10 @@
 #include <string.h>
 #include <unistd.h>
 
-struct package_strings {
+typedef struct package_strings {
     int cnt;
     char** strings;
-} typedef package_strings_t;
+} package_strings_t;
 
 void print_lines(package_strings_t* package) {
     for (int i = 0; i < package->cnt; i++) {
