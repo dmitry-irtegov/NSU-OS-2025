@@ -81,10 +81,9 @@ philosopher (void *num)
       down_forks (left_fork, right_fork);
     }else if(flag1){
       pthread_mutex_unlock(&forks[right_fork]);
-    }else{
+    }else if(flag2){
       pthread_mutex_unlock(&forks[left_fork]);
     }
-
     usleep (DELAY * (FOOD - f + 1));
   }
   printf ("Philosopher %d is done eating.\n", id);
