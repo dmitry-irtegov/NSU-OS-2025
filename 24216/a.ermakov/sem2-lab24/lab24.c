@@ -115,10 +115,10 @@ int main(int argc, char *argv[]) {
     pthread_join(t_c, NULL);
     pthread_join(t_m, NULL);
 
-    sem_destroy(&sem_a);
-    sem_destroy(&sem_b);
-    sem_destroy(&sem_c);
-    sem_destroy(&sem_module);
+    if (sem_destroy(&sem_a) != 0) { perror("sem_destroy A"); }
+    if (sem_destroy(&sem_b) != 0) { perror("sem_destroy B"); }
+    if (sem_destroy(&sem_c) != 0) { perror("sem_destroy C"); }
+    if (sem_destroy(&sem_module) != 0) { perror("sem_destroy Module"); }
 
     fprintf(stderr, "Программа успешно завершена, ресурсы очищены.\n");
     return 0;
