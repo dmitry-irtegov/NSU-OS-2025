@@ -23,16 +23,10 @@ void get_fork (int, int, char *);
 void down_forks (int, int);
 pthread_mutex_t foodlock;
 
-int sleep_seconds = 0;
-
 int
-main (int argn,
-      char **argv)
+main ()
 {
   int i;
-
-  if (argn == 2)
-    sleep_seconds = atoi (argv[1]);
 
   pthread_mutex_init (&foodlock, NULL);
   for (i = 0; i < PHILO; i++)
@@ -66,8 +60,6 @@ philosopher (void *num)
      * philosophers may be able to eat their dishes and 
      * not deadlock.
      */
-    if (id == 1) sleep (sleep_seconds);
-
     printf ("Philosopher %d: get dish %d.\n", id, f);
 
     int flag1 = 0, flag2 = 0;
