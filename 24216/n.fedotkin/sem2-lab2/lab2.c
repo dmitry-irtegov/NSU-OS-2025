@@ -17,11 +17,13 @@ int main() {
     result = pthread_create(&thread, NULL, thread_printer, NULL);
     if (result != 0) {
         fprintf(stderr, "Error pthread_create: %s\n", strerror(result));
+        return 1;
     }
 
     result = pthread_join(thread, NULL);
     if (result != 0) {
         fprintf(stderr, "Error pthread_join: %s\n", strerror(result));
+        return 1;
     }
 
 
