@@ -17,6 +17,7 @@ int main() {
     result = pthread_create(&thread, NULL, thread_printer, NULL);
     if (result != 0) {
         fprintf(stderr, "Error pthread_create: %s\n", strerror(result));
+        return 1;
     }
 
     for (int i = 0; i < 10; i++) {
@@ -26,6 +27,7 @@ int main() {
     result = pthread_join(thread, NULL);
     if (result != 0) {
         fprintf(stderr, "Error pthread_join: %s\n", strerror(result));
+        return 1;
     }
 
     return 0;
