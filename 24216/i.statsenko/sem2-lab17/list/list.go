@@ -88,7 +88,6 @@ func (l *LinkedList) Sort(duration time.Duration) {
 }
 
 func (l *LinkedList) swap(n1, n2 *node) {
-	// Если меняем голову, обновляем указатель списка
 	if l.head == n1 {
 		l.head = n2
 	} else if l.head == n2 {
