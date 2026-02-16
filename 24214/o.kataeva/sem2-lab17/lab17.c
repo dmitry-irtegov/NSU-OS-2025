@@ -4,15 +4,16 @@
 #include <string.h>
 #include <unistd.h>
 
-
 typedef struct Node {
     struct Node* next;
     char sentence[BUFSIZ];
-}Node;
+} Node;
 
 pthread_mutex_t mutex;
 Node* dummy_node;
 int size;
+
+volatile int should_exit = 0; 
 
 void add_in_begining(Node* dummy_node, Node* new_node) {
     pthread_mutex_lock(&mutex);
@@ -33,17 +34,29 @@ void print_list() {
     pthread_mutex_unlock(&mutex);
 }
 
-void* sort(void* param){
-    while(1) {
+void free_list() {
+    pthread_mutex_lock(&mutex);
+    Node* current = dummy_node; 
+    while (current != NULL) {
+        Node* next = current->next;
+        free(current); 
+        current = next;
+    }
+    pthread_mutex_unlock(&mutex);
+    pthread_mutex_destroy(&mutex); 
+}
+
+void* sort(void* param) {
+    while(!should_exit) {
         sleep(5);
         pthread_mutex_lock(&mutex);
-        printf("Thread started sort\n");
+        
         if(size == 0 || size == 1) {
-            printf("Nothing to sort\n");
             pthread_mutex_unlock(&mutex);
             continue;
         }
 
+        printf("Thread started sort\n");
         for(int i = 0; i < size - 1; i++) {
             Node* current = dummy_node;
             for(int j = 0; j < size - 1 - i; j++) {
@@ -59,12 +72,11 @@ void* sort(void* param){
         }
         printf("sorted\n");
         pthread_mutex_unlock(&mutex);
-
     }
+    return NULL;
 }
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
     pthread_mutex_init(&mutex, NULL);
     dummy_node = (Node*)malloc(sizeof(Node));
     dummy_node->next = NULL;
@@ -74,15 +86,11 @@ int main(int argc, char const *argv[])
     
     if (pthread_create(&thread, NULL, sort, NULL) != 0) {
         perror("pthread_create");
+        free(dummy_node);
         return -1;
     }
 
-    while(1) {
-        if (fgets(buffer, sizeof(buffer), stdin) == NULL) {
-            perror("fgets");
-            return -1;
-        }
-
+    while (fgets(buffer, sizeof(buffer), stdin) != NULL) {
         if (buffer[0] == '\n') {
             print_list();
             continue;
@@ -94,8 +102,17 @@ int main(int argc, char const *argv[])
         }
         buffer[n] = '\0';
         Node* new_node = (Node*)malloc(sizeof(Node));
+        if (new_node == NULL) {
+            perror("malloc");
+            continue;
+        }
         new_node->next = NULL;
         memcpy(&(new_node->sentence), &buffer, BUFSIZ);
         add_in_begining(dummy_node, new_node);
     }
+
+    should_exit = 1; 
+    pthread_join(thread, NULL); 
+    free_list(); 
+    return 0;
 }
