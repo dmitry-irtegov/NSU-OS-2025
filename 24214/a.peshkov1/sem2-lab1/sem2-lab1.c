@@ -6,6 +6,7 @@
 void* thread_routine() {
     for (int i = 1; i <= 10; i++) {
         printf("нить-ребёнок: строка %d\n", i);
+        sleep();
     }
     return NULL;
 }
