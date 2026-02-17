@@ -7,6 +7,7 @@ void *my_func(void *arg)
     while (1)
     {
         printf("Some text ");
+        fflush(stdout);
     }
 
     return NULL;
