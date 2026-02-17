@@ -33,7 +33,7 @@ int main()
 
     if (pthread_mutexattr_init(&attr))
     {
-        perrror("mutexattr init error");
+        perror("mutexattr init error");
         return 1;
     }
 
@@ -58,6 +58,8 @@ int main()
         perror("pthread_create error");
         return 1;
     }
+
+    usleep(100);
 
     for (int i = 1; i <= 10; i++)
     {
