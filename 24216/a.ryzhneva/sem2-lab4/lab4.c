@@ -5,8 +5,9 @@
 #include <unistd.h>
 
 void print_text(const char* text) {
-    for(int i = 0; i < 10; i++) {
+    while(1) {
         fprintf(stderr, "%s\n", text);
+        sleep(1);
     }
 }
 
@@ -37,5 +38,8 @@ int main(int argc, char* argv[]) {
     code = pthread_cancel(thread);
     check_code(code, argv[0], "canceling thread");
 
-    exit(EXIT_SUCCESS);
+    code = pthread_join(thread, NULL);
+    check_code(code, argv[0], "joining thread");
+
+    return EXIT_SUCCESS;
 }
