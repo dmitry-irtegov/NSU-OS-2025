@@ -9,7 +9,7 @@ void *child_thread() {
 
     int counter = 0;
     while (1) {
-        printf("Дочерняя нить работает... итерация %d\n", ++counter);
+        fprintf(stderr, "Дочерняя нить работает... итерация %d\n", ++counter);
         sleep(1);
     }
 
@@ -24,11 +24,11 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Дочерняя нить создана\n");
+    fprintf(stderr, "Дочерняя нить создана\n");
 
     sleep(2);
 
-    printf("Завершение дочерней нити\n");
+    fprintf(stderr, "Завершение дочерней нити\n");
 
     if (pthread_cancel(tid) != 0) {
         perror("pthread_cancel");
@@ -40,7 +40,7 @@ int main(void) {
         exit(EXIT_FAILURE);
     }
 
-    printf("дочерняя нить завершена\n");
+    fprintf(stderr, "Дочерняя нить завершена\n");
 
     return 0;
 }
