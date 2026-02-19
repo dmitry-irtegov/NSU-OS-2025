@@ -4,13 +4,12 @@
 #include <semaphore.h>
 #include <unistd.h>
 
-// Semaphores for parts and module
+
 sem_t sem_a;
 sem_t sem_b;
 sem_t sem_c;
 sem_t sem_module;
 
-// Thread function for Part A
 void* produce_a(void* arg) {
     while (1) {
         sleep(1);
@@ -20,7 +19,6 @@ void* produce_a(void* arg) {
     return NULL;
 }
 
-// Thread function for Part B
 void* produce_b(void* arg) {
     while (1) {
         sleep(2);
@@ -30,7 +28,7 @@ void* produce_b(void* arg) {
     return NULL;
 }
 
-// Thread function for Part C
+
 void* produce_c(void* arg) {
     while (1) {
         sleep(3);
@@ -40,7 +38,7 @@ void* produce_c(void* arg) {
     return NULL;
 }
 
-// Thread function for Module (needs A and B)
+
 void* produce_module(void* arg) {
     while (1) {
         sem_wait(&sem_a);
@@ -51,7 +49,6 @@ void* produce_module(void* arg) {
     return NULL;
 }
 
-// Thread function for Widget (needs Module and C)
 void* produce_widget(void* arg) {
     while (1) {
         sem_wait(&sem_c);
@@ -62,9 +59,6 @@ void* produce_widget(void* arg) {
 }
 
 int main() {
-    // Initialize semaphores
-    // pshared = 0 (shared between threads of the same process)
-    // value = 0 (initial count)
     sem_init(&sem_a, 0, 0);
     sem_init(&sem_b, 0, 0);
     sem_init(&sem_c, 0, 0);
@@ -94,14 +88,12 @@ int main() {
         return 1;
     }
 
-    // Wait for threads (they are infinite loops, so this blocks main)
     pthread_join(thread_wid, NULL);
     pthread_join(thread_mod, NULL);
     pthread_join(thread_a, NULL);
     pthread_join(thread_b, NULL);
     pthread_join(thread_c, NULL);
 
-    // Cleanup (unreachable in this code, but good practice)
     sem_destroy(&sem_a);
     sem_destroy(&sem_b);
     sem_destroy(&sem_c);
