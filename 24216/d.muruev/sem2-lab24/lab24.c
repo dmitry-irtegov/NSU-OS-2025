@@ -23,7 +23,7 @@ void* produce_b(void* arg) {
     while (1) {
         sleep(2);
         sem_post(&sem_b);
-        fprintf(stderr, "Part A produced\n");
+        fprintf(stderr, "Part B produced\n");
     }
     return NULL;
 }
