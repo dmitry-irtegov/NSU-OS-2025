@@ -13,7 +13,7 @@ void* print_strings(void* arg) {
     thread_data_t *data = (thread_data_t*)arg;
     
     for (int i = 0; i < data->count; i++) {
-        printf("Поток %d: %s\n", data->thread_num, data->sentences[i]);
+        fprintf(stderr, "Поток %d: %s\n", data->thread_num, data->sentences[i]);
     }
     
     pthread_exit(NULL);
@@ -50,6 +50,6 @@ int main() {
         }
     }
 
-    printf("Все потоки завершили работу.\n");
+    fprintf(stderr, "Все потоки завершили работу.\n");
     return 0;
 }
