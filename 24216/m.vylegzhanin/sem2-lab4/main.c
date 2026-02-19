@@ -10,7 +10,6 @@ void *child_thread() {
     int counter = 0;
     while (1) {
         printf("Дочерняя нить работает... итерация %d\n", ++counter);
-        fflush(stdout);
         sleep(1);
     }
 
