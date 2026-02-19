@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <string.h>
 
 void *child_thread() {
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
@@ -18,9 +19,10 @@ void *child_thread() {
 
 int main(void) {
     pthread_t tid;
+    int err;
 
-    if (pthread_create(&tid, NULL, child_thread, NULL) != 0) {
-        perror("pthread_create");
+    if ((err = pthread_create(&tid, NULL, child_thread, NULL)) != 0) {
+        fprintf(stderr, "pthread_create: %s\n", strerror(err));
         exit(EXIT_FAILURE);
     }
 
@@ -30,13 +32,13 @@ int main(void) {
 
     fprintf(stderr, "Завершение дочерней нити\n");
 
-    if (pthread_cancel(tid) != 0) {
-        perror("pthread_cancel");
+    if ((err = pthread_cancel(tid)) != 0) {
+        fprintf(stderr, "pthread_cancel: %s\n", strerror(err));
         exit(EXIT_FAILURE);
     }
 
-    if (pthread_join(tid, NULL) != 0) {
-        perror("pthread_join");
+    if ((err = pthread_join(tid, NULL)) != 0) {
+        fprintf(stderr, "pthread_join: %s\n", strerror(err));
         exit(EXIT_FAILURE);
     }
 
