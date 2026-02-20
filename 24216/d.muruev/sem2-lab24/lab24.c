@@ -41,12 +41,8 @@ void* produce_c(void* arg) {
 
 void* produce_module(void* arg) {
     while (1) {
-        while (sem_wait(&sem_a) == -1){
-            continue;
-        };
-        while (sem_wait(&sem_b) == -1){
-            continue;
-        };
+        sem_wait(&sem_a);
+        sem_wait(&sem_b);
         sem_post(&sem_module);
         fprintf(stderr, "Module produced (from A and B)\n");
     }
@@ -61,7 +57,7 @@ void* produce_widget(void* arg) {
         while (sem_wait(&sem_module) == -1){
             continue;
         };
-        fprintf(stderr, "Widget produced (from Module and C)\n");
+        fprintf(stderr, "Widget produced (from Mod. and C)\n");
     }
     return NULL;
 }
