@@ -1,6 +1,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void thread_task(char *str) {
     for (int i = 1; i <= 10; i++) {
@@ -20,13 +21,17 @@ int main() {
     result = pthread_create(&thread_id, NULL, launch_thread, "Child thread: string №");
 
     if (result != 0) {
-        fprintf(stderr, "Error while creating a thread: %d\n", result);
+        fprintf(stderr, "Error while creating a thread: %s\n", strerror(result));
         exit(1);
     }
 
-    pthread_join(thread_id, NULL);
+    result = pthread_join(thread_id, NULL);
+    if (result != 0) {
+        fprintf(stderr, "Error while joining a thread: %s\n", strerror(result));
+        exit(1);
+    }
 
     thread_task("Parent thread: string №");
 
-    pthread_exit(NULL);
+    return 0;
 }
