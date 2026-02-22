@@ -30,7 +30,7 @@ int main() {
         fprintf(stderr, "Error while joining a thread: %s\n", strerror(result));
         exit(1);
     }
-
+q
     thread_task("Parent thread: string №");
 
     return 0;
