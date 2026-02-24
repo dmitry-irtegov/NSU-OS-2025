@@ -22,7 +22,7 @@ void* pi_count(void *arg) {
         part_pi -= 1.0/(i*4.0 + 3.0);
     }
     data->part_sum = part_pi;
-    return arg;
+    return NULL;
 }
 int main(int argc, char *argv[]) {
 
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]) {
     num_threads = atoi(argv[1]);
     if (num_threads <= 0) {
         fprintf(stderr, "Number of threads must be bigger then 0.\n");
-        exit(1);
+        return -1;
     }
 
     thread_data* threads_data = (thread_data*)malloc(num_threads * sizeof(thread_data));
@@ -63,6 +63,8 @@ int main(int argc, char *argv[]) {
     }
 
     pi = pi * 4.0;
-    printf("pi done - %.15g \n", pi);    
+    printf("pi done - %.15g \n", pi);  
+    free(threads);
+    free(threads_data);  
     return 0;
 }
