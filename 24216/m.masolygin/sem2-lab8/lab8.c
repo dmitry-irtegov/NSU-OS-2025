@@ -3,11 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define num_steps 200000000
+#ifndef num_steps
+#define num_steps 200000000LL
+#endif
 
 typedef struct {
-    long start;
-    long end;
+    long long start;
+    long long end;
 } thread_args_t;
 
 void* calc_pi_part(void* arg) {
@@ -20,7 +22,7 @@ void* calc_pi_part(void* arg) {
     }
 
     *partial_sum = 0.0;
-    for (long i = args->start; i < args->end; i++) {
+    for (long long i = args->start; i < args->end; i++) {
         *partial_sum += 1.0 / (i * 4.0 + 1.0);
         *partial_sum -= 1.0 / (i * 4.0 + 3.0);
     }
@@ -50,10 +52,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    long steps_per_thread = num_steps / num_threads;
-    long remainder = num_steps % num_threads;
+    long long steps_per_thread = num_steps / num_threads;
+    long long remainder = num_steps % num_threads;
 
-    long start = 0;
+    long long start = 0;
     for (int i = 0; i < num_threads; i++) {
         args[i].start = start;
         args[i].end = start + steps_per_thread + (i < remainder ? 1 : 0);
