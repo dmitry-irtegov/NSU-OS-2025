@@ -34,7 +34,11 @@ int main() {
     }
 
     for (int i = 0; i < 4; i++) {
-        pthread_join(workers[i], NULL);
+        int res = pthread_join(workers[i], NULL);
+        if (res != 0) {
+            fprintf(stderr, "Error: pthread_join: %s", strerror(res));
+            return 1;
+        }
     }
 
     return 0;
