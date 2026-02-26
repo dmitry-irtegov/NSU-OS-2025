@@ -5,6 +5,8 @@
 #include <semaphore.h>
 #include <string.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+
 sem_t sem_a, sem_b, sem_c, sem_module;
 atomic_bool running = true;
 
@@ -87,8 +89,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Использование: %s <количество_винтиков>\n", argv[0]);
         return 1;
     }
-
-
 
     int target_count = atoi(argv[1]);
     if (target_count <= 0) {
