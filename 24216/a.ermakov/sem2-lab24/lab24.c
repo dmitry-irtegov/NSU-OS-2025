@@ -3,11 +3,10 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
-#include <stdbool.h>
 #include <string.h>
-
+#include <stdatomic.h>
 sem_t sem_a, sem_b, sem_c, sem_module;
-volatile bool running = true;
+atomic_bool running = true;
 
 void check_error(int result, const char *msg) {
     if (result != 0) {
@@ -88,6 +87,8 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Использование: %s <количество_винтиков>\n", argv[0]);
         return 1;
     }
+
+
 
     int target_count = atoi(argv[1]);
     if (target_count <= 0) {
