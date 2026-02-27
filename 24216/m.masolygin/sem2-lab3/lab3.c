@@ -11,7 +11,7 @@ typedef struct package_strings {
 
 void print_lines(package_strings_t* package) {
     for (int i = 0; i < package->cnt; i++) {
-        write(STDOUT_FILENO, package->strings[i], strlen(package->strings[i]));
+        fprintf(stderr, "%s", package->strings[i]);
     }
 }
 
