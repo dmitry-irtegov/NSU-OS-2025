@@ -80,10 +80,6 @@ int main() {
 
 
     pthread_join(thread_wid, NULL);
-    pthread_join(thread_mod, NULL);
-    pthread_join(thread_a, NULL);
-    pthread_join(thread_b, NULL);
-    pthread_join(thread_c, NULL);
 
     return 0;
 }
