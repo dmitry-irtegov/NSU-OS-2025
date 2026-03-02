@@ -55,8 +55,9 @@ func main() {
 	for i := 0; i < numOfPthreads; i++ {
 		totalSum += <-ch
 	}
+	close(ch)
 
 	pi := totalSum * 4.0
 
-	fmt.Printf("Pi = %.15f\n", pi)
+	fmt.Printf("Pi = %.8f\n", pi)
 }
