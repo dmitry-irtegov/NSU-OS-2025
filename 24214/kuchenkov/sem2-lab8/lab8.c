@@ -8,6 +8,12 @@ int is_found = 0;
 int global_n = 0;
 int global_thread_count = 0;
 
+void print_bits(uint32_t value) {
+    for (int i = 31; i >= 0; i--) {
+        printf("%d", (value >> i) & 1);
+    }
+}
+
 uint32_t toy_hash(uint32_t x, uint32_t salt) {
     uint32_t h = x ^ salt;
     h *= 0x7feb352d;
@@ -75,7 +81,13 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             if (result != NULL && !printed) {                
-                printf("Zeros: %2d | Hash: %032b | Salt: %032b\n", i, result[1], result[0]);
+                printf("Zeros: %2d | ", i);
+                printf("Hash: ");
+                print_bits(result[1]);
+                printf(" | Salt: ");
+                print_bits(result[0]);
+                printf("\n");
+
                 printed = 1;
             }
             free(result);
