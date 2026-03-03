@@ -9,25 +9,23 @@ import (
 	"syscall"
 )
 
-const batchSize = 1_000_000 // Number iterations beetwen flag checking
+const batchSize int64 = 1_000_000
 
-func calcPartialPi(id, numThreads int, stopFlag *atomic.Bool, ch chan<- float64) {
+func calcPartialPi(stopFlag *atomic.Bool, globalBlock *atomic.Int64, ch chan<- float64) {
 	var sum float64 = 0
-	iteration := 0
 
-	for !stopFlag.Load() {
-		for i := 0; i < batchSize; i++ {
-			k := (iteration*batchSize+i)*numThreads + id
-
-			term := 1.0 / float64(2*k+1)
-
-			if k%2 != 0 {
-				sum -= term
-			} else {
-				sum += term
-			}
+	for {
+		if stopFlag.Load() {
+			break
 		}
-		iteration++
+
+		blockID := globalBlock.Add(1) - 1
+		start := blockID * batchSize
+		end := start + batchSize
+
+		for k := start; k < end; k += 2 {
+			sum += 1.0/float64(2*k+1) - 1.0/float64(2*k+3)
+		}
 	}
 
 	ch <- sum
@@ -46,6 +44,7 @@ func main() {
 	}
 
 	var stopFlag atomic.Bool
+	var globalBlock atomic.Int64
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGINT)
@@ -59,7 +58,7 @@ func main() {
 	ch := make(chan float64, numOfPthreads)
 
 	for i := 0; i < numOfPthreads; i++ {
-		go calcPartialPi(i, numOfPthreads, &stopFlag, ch)
+		go calcPartialPi(&stopFlag, &globalBlock, ch)
 	}
 
 	var totalSum float64 = 0
@@ -71,5 +70,6 @@ func main() {
 
 	pi := totalSum * 4.0
 
-	fmt.Printf("Pi = %.15f\n", pi)
+	fmt.Printf("Pi =      %.8f\n", pi)
+	fmt.Printf("Real Pi = 3.14159265\n")
 }
