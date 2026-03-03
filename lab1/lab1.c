@@ -18,7 +18,7 @@ int main() {
     if (result != 0) {
         char buf[256];
         strerror_r(result, buf, sizeof(buf));
-        fprintf(stderr, "%s: creating thread: %s\n", argv[0], buf);
+        fprintf(stderr, "creating thread: %s\n", buf);
         return EXIT_FAILURE;
     }
 
