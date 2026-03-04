@@ -35,6 +35,6 @@ int main () {
         exit(2);
     }
 
-    //pthread_exit(NULL);
-    exit(0);
+    pthread_exit(NULL);
+    //exit(0);
 }
