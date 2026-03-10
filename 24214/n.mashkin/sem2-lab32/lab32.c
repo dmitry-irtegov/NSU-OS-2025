@@ -160,7 +160,7 @@ void* handle_client(void *arg) {
     int client_fd = args->client_fd;
     free(args);
     
-    printf("[Thread %ld] Client connected, fd=%d\n", pthread_self(), client_fd);
+    printf("[Thread %d] Client connected, fd=%d\n", pthread_self(), client_fd);
     
     char req_buf[BUFFER_SIZE];
     char *resp_buf = NULL;
@@ -176,7 +176,7 @@ void* handle_client(void *arg) {
             ssize_t n = recv(client_fd, req_buf + req_len, BUFFER_SIZE - req_len - 1, 0);
             if (n <= 0) {
                 if (n == 0) {
-                    printf("[Thread %ld] Client fd=%d closed connection\n", pthread_self(), client_fd);
+                    printf("[Thread %d] Client fd=%d closed connection\n", pthread_self(), client_fd);
                 } else {
                     perror("[Thread] recv");
                 }
@@ -191,7 +191,7 @@ void* handle_client(void *arg) {
             }
         }
         
-        printf("[Thread %ld] Received request (%zu bytes)\n", pthread_self(), req_len);
+        printf("[Thread %d] Received request (%zu bytes)\n", pthread_self(), req_len);
 
         char host[128] = {0};
         char path[256] = {0};
@@ -203,7 +203,7 @@ void* handle_client(void *arg) {
         
         char url[512];
         snprintf(url, sizeof(url), "http://%s%s", host, path);
-        printf("[Thread %ld] Request: %s\n", pthread_self(), url);
+        printf("[Thread %d] Request: %s\n", pthread_self(), url);
 
         char *cached_data = NULL;
         size_t cached_len = 0;
@@ -213,7 +213,7 @@ void* handle_client(void *arg) {
         if (cached) {
             cached_data = cached->data;
             cached_len = cached->data_size;
-            printf("[Thread %ld] Cache HIT: %s\n", pthread_self(), url);
+            printf("[Thread %d] Cache HIT: %s\n", pthread_self(), url);
         }
         pthread_mutex_unlock(&cache_mutex);
         
@@ -229,7 +229,7 @@ void* handle_client(void *arg) {
             continue;
         }
         
-        printf("[Thread %ld] Cache MISS: %s\n", pthread_self(), url);
+        printf("[Thread %d] Cache MISS: %s\n", pthread_self(), url);
 
         int server_fd = connect_to_server(host, 80);
         if (server_fd < 0) {
@@ -237,7 +237,7 @@ void* handle_client(void *arg) {
             break;
         }
         
-        printf("[Thread %ld] Connected to upstream server\n", pthread_self());
+        printf("[Thread %d] Connected to upstream server\n", pthread_self());
         
         if (send(server_fd, req_buf, req_len, 0) < 0) {
             perror("[Thread] send to server");
@@ -270,7 +270,7 @@ void* handle_client(void *arg) {
             
             if (n == 0) {
                 server_wants_close = 1;
-                printf("[Thread %ld] Server closed connection\n", pthread_self());
+                printf("[Thread %d] Server closed connection\n", pthread_self());
                 break;
             }
             
@@ -291,7 +291,7 @@ void* handle_client(void *arg) {
             if (headers_end_pos > 0 && expected_body_len > 0) {
                 size_t body_received = resp_len - headers_end_pos;
                 if (body_received >= expected_body_len) {
-                    printf("[Thread %ld] Response complete (%zu bytes)\n", pthread_self(), resp_len);
+                    printf("[Thread %d] Response complete (%zu bytes)\n", pthread_self(), resp_len);
                     break;
                 }
             }
@@ -310,7 +310,7 @@ void* handle_client(void *arg) {
                 if (removed) {
                     free_entry(removed);
                 }
-                printf("[Thread %ld] Cached response (%zu bytes)\n", pthread_self(), resp_len);
+                printf("[Thread %d] Cached response (%zu bytes)\n", pthread_self(), resp_len);
             } else {
                 free(url_copy);
                 free(data_copy);
@@ -323,22 +323,22 @@ void* handle_client(void *arg) {
                 perror("[Thread] send to client");
                 break;
             }
-            printf("[Thread %ld] Sent response to client\n", pthread_self());
+            printf("[Thread %d] Sent response to client\n", pthread_self());
         }
 
         if (!client_wants_keepalive(req_buf) || server_wants_close) {
-            printf("[Thread %ld] Closing connection (keep-alive=%d, server_close=%d)\n", 
+            printf("[Thread %d] Closing connection (keep-alive=%d, server_close=%d)\n", 
                    pthread_self(), client_wants_keepalive(req_buf), server_wants_close);
             break;
         }
         
-        printf("[Thread %ld] Keeping connection alive for next request\n", pthread_self());
+        printf("[Thread %d] Keeping connection alive for next request\n", pthread_self());
     }
     
 cleanup:
     close(client_fd);
     if (resp_buf) free(resp_buf);
-    printf("[Thread %ld] Client fd=%d disconnected\n", pthread_self(), client_fd);
+    printf("[Thread %d] Client fd=%d disconnected\n", pthread_self(), client_fd);
     return NULL;
 }
 
