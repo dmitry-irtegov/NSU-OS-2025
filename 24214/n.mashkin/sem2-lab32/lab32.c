@@ -378,8 +378,6 @@ int main(int argc, char *argv[]) {
     
     printf("Multi-threaded proxy server listening on port %d\n", port);
 
-    int thread_count = 0;
-    
     while (1) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
@@ -415,9 +413,6 @@ int main(int argc, char *argv[]) {
         }
         
         pthread_attr_destroy(&attr);
-        thread_count++;
-        
-        printf("[Main] Thread created for fd=%d (active: %d)\n", client_fd, thread_count);
     }
     
     close(listen_fd);
