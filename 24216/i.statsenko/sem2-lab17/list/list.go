@@ -95,6 +95,10 @@ func (l *LinkedList) swap(n1, n2 *node) {
 		l.head = n1
 	}
 
+	if l.count == 2 {
+		return
+	}
+
 	left := n1.prev
 	right := n2.next
 
