@@ -21,7 +21,8 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-		line = strings.TrimSpace(line)
+		line = strings.TrimRight(line, "\n")
+
 		if line == "" {
 			linkList.Print()
 			continue
