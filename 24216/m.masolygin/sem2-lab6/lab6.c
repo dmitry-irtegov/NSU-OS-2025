@@ -56,11 +56,22 @@ int main(int argc, char* argv[]) {
     int count = 0;
 
     while (getline(&string, &len, input) != -1 && count < MAX_STRINGS) {
-        char* thread_string = strdup(string);
+        size_t slen = strlen(string);
+        char* thread_string;
+
+        if (slen > 0 && string[slen - 1] == '\n') {
+            thread_string = strdup(string);
+        }
+
+        else {
+            thread_string = malloc(slen + 2);
+            if (thread_string != NULL) {
+                sprintf(thread_string, "%s\n", string);
+            }
+        }
 
         if (thread_string == NULL) {
-            fprintf(stderr, "Error duplicating string\n");
-            free(string);
+            fprintf(stderr, "Error allocating memory\n");
             break;
         }
 
