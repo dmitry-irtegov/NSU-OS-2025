@@ -1,5 +1,5 @@
 CC=cc
-COMPILE_FLAGS=-Wall -Wextra -Werror -mt
+COMPILE_FLAGS=-lsocket -lnsl -mt
 
 all: lab33
 
