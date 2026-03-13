@@ -4,14 +4,7 @@ extern void* worker_thread(void *arg);
 
 Cache *cache;
 pthread_mutex_t cache_mutex = PTHREAD_MUTEX_INITIALIZER;
-TaskQueue task_queue = {
-    .head = 0,
-    .tail = 0,
-    .count = 0,
-    .mutex = PTHREAD_MUTEX_INITIALIZER,
-    .cond = PTHREAD_COND_INITIALIZER,
-    .shutdown = 0
-};
+TaskQueue task_queue;
 int wakeup_pipe[2];
 
 const char* get_header_value(const char *headers, const char *header_name) {
@@ -279,6 +272,14 @@ int main(int argc, char *argv[]) {
     printf("Proxy started on port %d with %d worker threads\n", port, thread_count);
     
     cache = init_cache(100);
+    task_queue = (TaskQueue) {
+        .head = 0,
+        .tail = 0,
+        .count = 0,
+        .mutex = PTHREAD_MUTEX_INITIALIZER,
+        .cond = PTHREAD_COND_INITIALIZER,
+        .shutdown = 0
+    };
     
     if (pipe(wakeup_pipe) < 0) {
         perror("pipe");
