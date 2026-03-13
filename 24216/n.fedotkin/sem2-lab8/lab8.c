@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
     unsigned long long remainder = TOTAL_ITERATIONS % thread_count;
 
     unsigned long long current_start = 0;
-    for (int i = 0; i < thread_count; i++) {
+    for (long i = 0; i < thread_count; i++) {
         t_args[i].start_idx = current_start;
         
         unsigned long long my_chunk = chunk_size + (i < remainder ? 1 : 0);
@@ -71,7 +71,7 @@ int main(int argc, char *argv[]) {
 
         int status = pthread_create(&threads[i], NULL, calculator, &t_args[i]);
         if (status != 0) {
-            fprintf(stderr, "Error pthread_create for thread %d: %s\n", i, strerror(status));
+            fprintf(stderr, "Error pthread_create for thread %ld: %s\n", i, strerror(status));
             free(threads);
             free(t_args);
             return EXIT_FAILURE;
@@ -80,12 +80,12 @@ int main(int argc, char *argv[]) {
 
     double total_pi = 0.0;
     
-    for (int i = 0; i < thread_count; i++) {
+    for (long i = 0; i < thread_count; i++) {
         void* returned_sum = NULL;
         
         int status = pthread_join(threads[i], &returned_sum);
         if (status != 0) {
-            fprintf(stderr, "Error pthread_join for thread %d: %s\n", i, strerror(status));
+            fprintf(stderr, "Error pthread_join for thread %ld: %s\n", i, strerror(status));
             free(threads);
             free(t_args);
             return EXIT_FAILURE;
