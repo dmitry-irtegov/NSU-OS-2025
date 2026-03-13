@@ -315,7 +315,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    pthread_t *threads = malloc(sizeof(pthread_t) * thread_count);
+    pthread_t threads[thread_count];
     for (int i = 0; i < thread_count; i++) {
         int *thread_id = malloc(sizeof(int));
         *thread_id = i;
