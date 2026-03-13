@@ -26,8 +26,13 @@ int main(int argc, char** argv) {
         fprintf(stderr, "Неверное количество аргументов.\n");
         return (EXIT_FAILURE);
     }
+    char *endptr;
+    long cntThreads = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || cntThreads <= 0) {
+        fprintf(stderr, "Аргумент должен быть положительным целым числом.\n");
+        return (EXIT_FAILURE);
+    }
     double pi = 0;
-    int cntThreads = atoi(argv[1]);
     pthread_t threads[cntThreads];
     struct thread_data thread_data_array[cntThreads];
     for (int i = 0; i < cntThreads ; i++) {
