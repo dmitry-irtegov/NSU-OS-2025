@@ -207,20 +207,20 @@ int find_connection_slot(ThreadState *state) {
 
 void init_connection(ThreadState *state, int slot, int client_fd) {
     ThreadConnection *conn = &state->connections[slot];
-    memset(conn, 0, sizeof(ThreadConnection));
+    
     conn->client_fd = client_fd;
     conn->server_fd = -1;
-    conn->state = 0;
+    conn->state = RECV_REQ;
     conn->active = 1;
-    conn->resp_buf = NULL;
-    conn->resp_cap = 0;
-    conn->resp_len = 0;
-    conn->resp_sent = 0;
     conn->req_len = 0;
     conn->req_sent = 0;
+    conn->resp_len = 0;
+    conn->resp_sent = 0;
     conn->expected_body_len = 0;
     conn->headers_end_pos = 0;
     conn->server_wants_close = 0;
+    if (conn->url) conn->url[0] = '\0';
+    if (conn->req_buf) conn->req_buf[0] = '\0';
     
     int flags = fcntl(client_fd, F_GETFL, 0);
     fcntl(client_fd, F_SETFL, flags | O_NONBLOCK);
@@ -235,19 +235,26 @@ void close_connection(ThreadState *state, int slot) {
     
     if (conn->client_fd >= 0) {
         close(conn->client_fd);
+        conn->client_fd = -1;
     }
     if (conn->server_fd >= 0) {
         close(conn->server_fd);
-    }
-    if (conn->resp_buf) {
-        free(conn->resp_buf);
+        conn->server_fd = -1;
     }
     
-    memset(conn, 0, sizeof(ThreadConnection));
-    conn->client_fd = -1;
-    conn->server_fd = -1;
+    conn->active = 0;
+    conn->state = RECV_REQ;
+    conn->req_len = 0;
+    conn->req_sent = 0;
+    conn->resp_len = 0;
+    conn->resp_sent = 0;
+    conn->expected_body_len = 0;
+    conn->headers_end_pos = 0;
+    conn->server_wants_close = 0;
+    if (conn->url) conn->url[0] = '\0';
+    if (conn->req_buf) conn->req_buf[0] = '\0';
     
-    state->max_fd = 0;
+    state->max_fd = wakeup_pipe[0];
     for (int i = 0; i < MAX_CONNECTIONS_PER_THREAD; i++) {
         if (state->connections[i].active) {
             if (state->connections[i].client_fd > state->max_fd)
@@ -256,6 +263,73 @@ void close_connection(ThreadState *state, int slot) {
                 state->max_fd = state->connections[i].server_fd;
         }
     }
+}
+
+int init_connection_buffers(ThreadConnection *conn) {
+    conn->req_buf = malloc(BUFFER_SIZE);
+    if (!conn->req_buf) return -1;
+    
+    conn->url = malloc(512);
+    if (!conn->url) {
+        free(conn->req_buf);
+        return -1;
+    }
+    
+    conn->resp_buf = NULL;  // Will be allocated on demand
+    conn->resp_cap = 0;
+    return 0;
+}
+
+void free_connection_buffers(ThreadConnection *conn) {
+    if (conn->req_buf) {
+        free(conn->req_buf);
+        conn->req_buf = NULL;
+    }
+    if (conn->url) {
+        free(conn->url);
+        conn->url = NULL;
+    }
+    if (conn->resp_buf) {
+        free(conn->resp_buf);
+        conn->resp_buf = NULL;
+        conn->resp_cap = 0;
+    }
+}
+
+int init_thread_state(ThreadState *state) {
+    memset(state, 0, sizeof(ThreadState));
+    
+    state->connections = calloc(MAX_CONNECTIONS_PER_THREAD, sizeof(ThreadConnection));
+    if (!state->connections) return -1;
+    
+    for (int i = 0; i < MAX_CONNECTIONS_PER_THREAD; i++) {
+        state->connections[i].client_fd = -1;
+        state->connections[i].server_fd = -1;
+        state->connections[i].active = 0;
+        if (init_connection_buffers(&state->connections[i]) < 0) {
+            for (int j = 0; j < i; j++) {
+                free_connection_buffers(&state->connections[j]);
+            }
+            free(state->connections);
+            state->connections = NULL;
+            return -1;
+        }
+    }
+    
+    state->max_fd = 0;
+    state->connection_count = 0;
+    return 0;
+}
+
+void free_thread_state(ThreadState *state) {
+    if (!state->connections) return;
+    
+    for (int i = 0; i < MAX_CONNECTIONS_PER_THREAD; i++) {
+        free_connection_buffers(&state->connections[i]);
+    }
+    
+    free(state->connections);
+    state->connections = NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -352,7 +426,6 @@ int main(int argc, char *argv[]) {
     }
     
     close(listen_fd);
-    free(threads);
     free_cache(cache);
     pthread_mutex_destroy(&cache_mutex);
     pthread_mutex_destroy(&task_queue.mutex);

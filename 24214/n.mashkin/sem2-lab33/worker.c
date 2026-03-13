@@ -12,14 +12,11 @@ void* worker_thread(void *arg) {
     printf("[Worker %d] Started\n", thread_id);
     
     ThreadState state;
-    memset(&state, 0, sizeof(ThreadState));
-    for (int i = 0; i < MAX_CONNECTIONS_PER_THREAD; i++) {
-        state.connections[i].client_fd = -1;
-        state.connections[i].server_fd = -1;
-        state.connections[i].active = 0;
+    if (init_thread_state(&state) < 0) {
+        perror("[Worker] init_thread_state");
+        return NULL;
     }
-    state.max_fd = 0;
-    
+
     while (1) {
         int has_active = 0;
         for (int i = 0; i < MAX_CONNECTIONS_PER_THREAD; i++) {
@@ -160,14 +157,13 @@ void* worker_thread(void *arg) {
                             char host[128] = {0};
                             char path[256] = {0};
                             
-                            if (parse_http_request(conn->req_buf, host, sizeof(host), 
-                                                   path, sizeof(path)) != 0) {
+                            if (parse_http_request(conn->req_buf, host, sizeof(host), path, sizeof(path)) != 0) {
                                 send_error_response(conn->client_fd, 400, "Bad Request");
                                 close_connection(&state, i);
                                 continue;
                             }
                             
-                            snprintf(conn->url, sizeof(conn->url), "http://%s%s", host, path);
+                            snprintf(conn->url, 512, "http://%s%s", host, path);
                             printf("[Worker %d] Request: %s\n", thread_id, conn->url);
                             
                             pthread_mutex_lock(&cache_mutex);
@@ -183,7 +179,7 @@ void* worker_thread(void *arg) {
                                     conn->state = 0;
                                     conn->req_len = 0;
                                     conn->req_sent = 0;
-                                    memset(conn->req_buf, 0, sizeof(conn->req_buf));
+                                    memset(conn->req_buf, 0, BUFFER_SIZE);
                                 }
                                 continue;
                             }
@@ -345,7 +341,7 @@ void* worker_thread(void *arg) {
                                     conn->resp_buf = NULL;
                                     conn->resp_cap = 0;
                                 }
-                                memset(conn->req_buf, 0, sizeof(conn->req_buf));
+                                memset(conn->req_buf, 0, BUFFER_SIZE);
                             } else {
                                 close_connection(&state, i);
                             }
@@ -361,6 +357,8 @@ void* worker_thread(void *arg) {
             close_connection(&state, i);
         }
     }
+    
+    free_thread_state(&state);
     
     printf("[Worker %d] Shutdown complete\n", thread_id);
     return NULL;

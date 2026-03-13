@@ -44,7 +44,7 @@ typedef struct {
 typedef struct {
     int client_fd;
     int server_fd;
-    char req_buf[BUFFER_SIZE];
+    char *req_buf;
     size_t req_len;
     size_t req_sent;
     char *resp_buf;
@@ -54,13 +54,13 @@ typedef struct {
     size_t expected_body_len;
     size_t headers_end_pos;
     int server_wants_close;
-    char url[512];
+    char *url;
     int state;
     int active;
 } ThreadConnection;
 
 typedef struct {
-    ThreadConnection connections[MAX_CONNECTIONS_PER_THREAD];
+    ThreadConnection *connections;
     fd_set read_fds;
     fd_set write_fds;
     fd_set except_fds;
@@ -78,6 +78,10 @@ int queue_pop(ClientTask *task, int should_block);
 int find_connection_slot(ThreadState *state);
 void init_connection(ThreadState *state, int slot, int client_fd);
 void close_connection(ThreadState *state, int slot);
+int init_connection_buffers(ThreadConnection *conn);
+void free_connection_buffers(ThreadConnection *conn);
+int init_thread_state(ThreadState *state);
+void free_thread_state(ThreadState *state);
 void* worker_thread(void *arg);
 
 #endif // DEFINITIONS
