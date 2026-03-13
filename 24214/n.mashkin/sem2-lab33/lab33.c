@@ -316,8 +316,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
-    printf("Listening on port %d...\n\n", port);
-    
     pthread_t *threads = malloc(sizeof(pthread_t) * thread_count);
     for (int i = 0; i < thread_count; i++) {
         int *thread_id = malloc(sizeof(int));
@@ -342,9 +340,6 @@ int main(int argc, char *argv[]) {
             perror("accept");
             continue;
         }
-        
-        printf("[Main] New connection from %s:%d, fd=%d\n", 
-               inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), client_fd);
         
         ClientTask task;
         task.client_fd = client_fd;
