@@ -1,5 +1,5 @@
-CC=gcc
-COMPILE_FLAGS=-Wall -Wextra -Werror
+CC=cc
+COMPILE_FLAGS=-Wall -Wextra -Werror -mt
 
 all: lab33
 
