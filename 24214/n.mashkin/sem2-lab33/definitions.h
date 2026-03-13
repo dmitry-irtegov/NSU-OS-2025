@@ -68,5 +68,16 @@ typedef struct {
     int connection_count;
 } ThreadState;
 
+const char* get_header_value(const char *headers, const char *header_name);
+ssize_t parse_response_headers(const char *buf, size_t len, size_t *content_length);
+int client_wants_keepalive(const char *req_buf);
+int parse_http_request(const char *request, char *host, int host_len, char *path, int path_len);
+int connect_to_server(const char *host, int port);
+void send_error_response(int client_fd, int code, const char *message);
+int queue_pop(ClientTask *task, int should_block);
+int find_connection_slot(ThreadState *state);
+void init_connection(ThreadState *state, int slot, int client_fd);
+void close_connection(ThreadState *state, int slot);
+void* worker_thread(void *arg);
 
 #endif // DEFINITIONS

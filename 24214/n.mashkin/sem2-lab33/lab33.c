@@ -1,7 +1,5 @@
 #include "definitions.h"
 
-extern void* worker_thread(void *arg);
-
 Cache *cache;
 pthread_mutex_t cache_mutex = PTHREAD_MUTEX_INITIALIZER;
 TaskQueue task_queue;
