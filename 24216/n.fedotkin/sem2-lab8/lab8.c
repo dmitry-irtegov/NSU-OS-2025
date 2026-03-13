@@ -40,10 +40,11 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    int thread_count = atoi(argv[1]);
-    if (thread_count <= 0) {
-        fprintf(stderr, "Error not a valid positive number of threads.\n");
-        return EXIT_FAILURE;
+    char *endptr;
+    long thread_count = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || thread_count <= 0) {
+        fprintf(stderr, "Number of threads must be a positive integer.\n");
+        exit(EXIT_FAILURE);
     }
 
     pthread_t* threads = malloc(thread_count * sizeof(pthread_t));
