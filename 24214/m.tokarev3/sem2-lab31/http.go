@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net"
 	"strings"
 )
@@ -33,7 +33,6 @@ func parseRequest(r *bufio.Reader) (*Request, error) {
 		Version: parts[2],
 	}
 
-	// Headers
 	for {
 		h, err := readLine(r)
 		if err != nil {
@@ -109,7 +108,7 @@ func fetchFromUpstream(req *Request) ([]byte, error) {
 		return nil, fmt.Errorf("write upstream request: %w", err)
 	}
 
-	data, err := io.ReadAll(conn)
+	data, err := ioutil.ReadAll(conn)
 	if err != nil {
 		return nil, fmt.Errorf("read upstream response: %w", err)
 	}
