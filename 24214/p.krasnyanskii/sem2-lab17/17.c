@@ -13,10 +13,13 @@ typedef struct Node {
 
 Node* head = NULL;
 pthread_mutex_t list_mutex = PTHREAD_MUTEX_INITIALIZER;
+volatile int running = 1;
 
 void add_to_list(char* str) {
     Node* new_node = malloc(sizeof(Node));
+    if (!new_node) { perror("malloc"); return; }
     strcpy(new_node->data, str);
+
     pthread_mutex_lock(&list_mutex);
     new_node->next = head;
     head = new_node;
@@ -55,8 +58,7 @@ void sort_list() {
 }
 
 void* sorter_thread(void* arg) {
-
-    while (1) {
+    while (running) {
         sleep(5);
         pthread_mutex_lock(&list_mutex);
         sort_list();
@@ -66,9 +68,20 @@ void* sorter_thread(void* arg) {
     return NULL;
 }
 
+void free_list() {
+    Node* current = head;
+    while (current) {
+        Node* next = current->next;
+        free(current);
+        current = next;
+    }
+    head = NULL;
+}
+
 int main() {
     pthread_t sorter;
     pthread_create(&sorter, NULL, sorter_thread, NULL);
+
     char buffer[1024];
     while (1) {
         if (!fgets(buffer, sizeof(buffer), stdin))
@@ -90,7 +103,12 @@ int main() {
         }
         add_to_list(ptr);
     }
+
+    running = 0;
     pthread_join(sorter, NULL);
+
+    free_list();
+    pthread_mutex_destroy(&list_mutex);
     return 0;
 }
 
