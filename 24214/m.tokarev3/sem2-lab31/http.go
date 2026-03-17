@@ -33,6 +33,10 @@ func parseRequest(r *bufio.Reader) (*Request, error) {
 		Version: parts[2],
 	}
 
+	if req.Version != "HTTP/1.0" {
+		return nil, fmt.Errorf("HTTP version not supported: %s", req.Version)
+	}
+
 	for {
 		h, err := readLine(r)
 		if err != nil {
@@ -54,13 +58,6 @@ func buildUpstreamRequest(req *Request) []byte {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "%s %s HTTP/1.0\r\n", req.Method, req.Target)
 	for _, h := range req.Headers {
-		lower := strings.ToLower(h)
-		if strings.HasPrefix(lower, "proxy-") ||
-			strings.HasPrefix(lower, "connection:") ||
-			strings.HasPrefix(lower, "keep-alive:") ||
-			strings.HasPrefix(lower, "transfer-encoding:") {
-			continue
-		}
 		fmt.Fprintf(&b, "%s\r\n", h)
 	}
 	b.WriteString("Connection: close\r\n")
