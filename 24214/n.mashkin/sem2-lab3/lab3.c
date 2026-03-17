@@ -35,19 +35,19 @@ int main() {
         return 1;
     }
 
-    if ((res = pthread_join(thr1, NULL) != 0)) {
+    if ((res = pthread_join(thr1, NULL)) != 0) {
         fprintf(stderr, "pthread_join: %s", strerror(res));
         return 1;
     }
-    if ((res = pthread_join(thr2, NULL) != 0)) {
+    if ((res = pthread_join(thr2, NULL)) != 0) {
         fprintf(stderr, "pthread_join: %s", strerror(res));
         return 1;
     }
-    if ((res = pthread_join(thr3, NULL) != 0)) {
+    if ((res = pthread_join(thr3, NULL)) != 0) {
         fprintf(stderr, "pthread_join: %s", strerror(res));
         return 1;
     }
-    if ((res = pthread_join(thr4, NULL) != 0)) {
+    if ((res = pthread_join(thr4, NULL)) != 0) {
         fprintf(stderr, "pthread_join: %s", strerror(res));
         return 1;
     }
