@@ -17,7 +17,7 @@ int main() {
         return 1;
     }
 
-    if ((res = pthread_join(thr, NULL) != 0)) {
+    if ((res = pthread_join(thr, NULL)) != 0) {
         fprintf(stderr, "pthread_join: %s", strerror(res));
         return 1;
     }
