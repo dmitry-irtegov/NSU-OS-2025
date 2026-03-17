@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-void goddamn(void *) {
+void goddamn() {
     printf("GODDAMN\n");
 }
 
