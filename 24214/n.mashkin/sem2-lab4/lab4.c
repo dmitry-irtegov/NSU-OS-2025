@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 
-void *thread(void *) {
+void *thread() {
     for (int i = 0; i < 100; i++) {
         printf("Child: %d\n", i);
         usleep(300000);
