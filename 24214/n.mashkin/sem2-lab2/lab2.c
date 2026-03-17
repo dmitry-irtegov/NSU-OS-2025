@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 
-void *thread(void *) {
+void *thread() {
     for (int i = 0; i < 10; i++) {
         printf("Child: %d\n", i);
     }
