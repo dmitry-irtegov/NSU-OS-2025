@@ -275,7 +275,7 @@ int init_connection_buffers(ThreadConnection *conn) {
         return -1;
     }
     
-    conn->resp_buf = NULL;  // Will be allocated on demand
+    conn->resp_buf = NULL;
     conn->resp_cap = 0;
     return 0;
 }
