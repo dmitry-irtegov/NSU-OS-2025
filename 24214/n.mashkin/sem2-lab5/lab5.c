@@ -7,7 +7,7 @@ void goddamn(void *) {
     printf("GODDAMN\n");
 }
 
-void *thread(void *) {
+void *thread() {
     pthread_cleanup_push(goddamn, NULL);
 
     for (int i = 0; i < 100; i++) {
