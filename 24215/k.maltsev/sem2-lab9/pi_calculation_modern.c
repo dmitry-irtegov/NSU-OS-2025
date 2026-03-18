@@ -7,6 +7,8 @@
 #define CHECK_INTERVAL 1000000L
 
 static volatile sig_atomic_t stop_requested = 0;
+static int should_finish = 0;
+static pthread_barrier_t barrier;
 
 typedef struct {
     long thread_id;
@@ -32,15 +34,28 @@ void *calc_pi(void *arg)
 
     *partial_sum = 0.0;
 
-    long i = id;
+    long base = id * CHECK_INTERVAL;
+
     while (1) {
-        long limit = i + CHECK_INTERVAL * n_threads;
-        for (; i < limit; i += n_threads) {
-            *partial_sum += 1.0 / (i * 4.0 + 1.0);
-            *partial_sum -= 1.0 / (i * 4.0 + 3.0);
+        for (long j = 0; j < CHECK_INTERVAL; ++j) {
+            long k = base + j;
+            *partial_sum += 1.0 / (k * 4.0 + 1.0);
+            *partial_sum -= 1.0 / (k * 4.0 + 3.0);
         }
 
-        if (stop_requested) {
+        base += CHECK_INTERVAL * n_threads;
+
+        int rc = pthread_barrier_wait(&barrier);
+
+        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+            if (stop_requested) {
+                should_finish = 1;
+            }
+        }
+
+        pthread_barrier_wait(&barrier);
+
+        if (should_finish) {
             break;
         }
     }
@@ -57,7 +72,7 @@ int main(int argc, char **argv)
 
     int num_threads = atoi(argv[1]);
     if (num_threads <= 0) {
-        fprintf(stderr, "Number of threades need to be positive.\n");
+        fprintf(stderr, "Number of threads must be positive.\n");
         return EXIT_FAILURE;
     }
 
@@ -71,6 +86,11 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+    if (pthread_barrier_init(&barrier, NULL, (unsigned)num_threads) != 0) {
+        perror("pthread_barrier_init");
+        return EXIT_FAILURE;
+    }
+
     pthread_t *threads = malloc((size_t)num_threads * sizeof(pthread_t));
     thread_data_t *thread_data = malloc((size_t)num_threads * sizeof(thread_data_t));
 
@@ -78,6 +98,7 @@ int main(int argc, char **argv)
         perror("malloc");
         free(threads);
         free(thread_data);
+        pthread_barrier_destroy(&barrier);
         return EXIT_FAILURE;
     }
 
@@ -88,6 +109,7 @@ int main(int argc, char **argv)
         if (pthread_create(&threads[i], NULL, calc_pi, &thread_data[i]) != 0) {
             perror("pthread_create");
             stop_requested = 1;
+            should_finish = 1;
 
             for (int j = 0; j < i; ++j) {
                 void *status = NULL;
@@ -97,6 +119,7 @@ int main(int argc, char **argv)
 
             free(threads);
             free(thread_data);
+            pthread_barrier_destroy(&barrier);
             return EXIT_FAILURE;
         }
     }
@@ -121,6 +144,7 @@ int main(int argc, char **argv)
 
     free(threads);
     free(thread_data);
+    pthread_barrier_destroy(&barrier);
 
     return EXIT_SUCCESS;
 }
