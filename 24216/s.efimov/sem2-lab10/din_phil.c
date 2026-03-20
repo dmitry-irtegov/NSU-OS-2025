@@ -61,15 +61,6 @@ philosopher (void *num)
     left_fork = 0;
   }
   while (f = food_on_table ()) {
-
-    /* Thanks to philosophers #1 who would like to 
-     * take a nap before picking up the forks, the other
-     * philosophers may be able to eat their dishes and 
-     * not deadlock.
-     */
-    if (id == 1)
-      sleep (sleep_seconds);
-
     printf ("Philosopher %d: get dish %d.\n", id, f);
     get_fork (id, right_fork, "right");
     get_fork (id, left_fork, "left ");
