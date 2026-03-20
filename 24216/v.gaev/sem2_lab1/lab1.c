@@ -5,7 +5,7 @@
 
 void* child_task(void* arg) {
     for (int i = 1; i <= 10; i++) {
-        printf("Дочерняя нить: строка %d\n", i);
+        fprintf(stderr, "Дочерняя нить: строка %d\n", i);
     }
     return NULL;
 }
@@ -21,7 +21,7 @@ int main(int argc, char *argv[]) {
     }
 
     for (int i = 1; i <= 10; i++) {
-        printf("Родительская нить: строка %d\n", i);
+        fprintf(stderr, "Родительская нить: строка %d\n", i);
     }
 
     s = pthread_join(thread_id, NULL);
@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Главная программа: все нити завершили работу.\n");
+    fprintf(stderr, "Главная программа: все нити завершили работу.\n");
 
     return 0;
 }
