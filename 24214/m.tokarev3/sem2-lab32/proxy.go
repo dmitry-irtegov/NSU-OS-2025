@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -103,7 +103,7 @@ func (p *Proxy) handleConnection(clientConn net.Conn) {
 		return
 	}
 
-	upData, err := io.ReadAll(upConn)
+	upData, err := ioutil.ReadAll(upConn)
 	if err != nil {
 		log.Printf("failed to read from upstream: %v", err)
 		clientConn.Write(errResponse(502, "Bad Gateway"))
