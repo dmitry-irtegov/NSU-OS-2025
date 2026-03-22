@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net"
 	"strings"
@@ -15,6 +16,7 @@ type Request struct {
 	Version string
 	Headers []string
 	Host    string
+	Body    []byte
 }
 
 func parseRequest(r *bufio.Reader) (*Request, error) {
@@ -33,9 +35,8 @@ func parseRequest(r *bufio.Reader) (*Request, error) {
 		Version: parts[2],
 	}
 
-	if req.Version != "HTTP/1.0" {
-		return nil, fmt.Errorf("HTTP version not supported: %s", req.Version)
-	}
+	contentLength := -1
+	isChunked := false
 
 	for {
 		h, err := readLine(r)
@@ -49,19 +50,63 @@ func parseRequest(r *bufio.Reader) (*Request, error) {
 		lower := strings.ToLower(h)
 		if strings.HasPrefix(lower, "host:") {
 			req.Host = strings.TrimSpace(h[5:])
+		} else if strings.HasPrefix(lower, "content-length:") {
+			fmt.Sscanf(lower, "content-length: %d", &contentLength)
+		} else if strings.HasPrefix(lower, "transfer-encoding:") && strings.Contains(lower, "chunked") {
+			isChunked = true
 		}
 	}
+
+	var bodyBuf bytes.Buffer
+	if isChunked {
+		for {
+			chunkHeader, err := readLine(r)
+			if err != nil {
+				return nil, err
+			}
+			bodyBuf.WriteString(chunkHeader + "\r\n")
+
+			var chunkSize int
+			fmt.Sscanf(chunkHeader, "%x", &chunkSize)
+
+			if chunkSize == 0 {
+				empty, _ := readLine(r)
+				bodyBuf.WriteString(empty + "\r\n")
+				break
+			}
+
+			chunkData := make([]byte, chunkSize)
+			if _, err := io.ReadFull(r, chunkData); err != nil {
+				return nil, err
+			}
+			bodyBuf.Write(chunkData)
+
+			crlf, _ := readLine(r)
+			bodyBuf.WriteString(crlf + "\r\n")
+		}
+	} else if contentLength > 0 {
+		body := make([]byte, contentLength)
+		if _, err := io.ReadFull(r, body); err != nil {
+			return nil, err
+		}
+		bodyBuf.Write(body)
+	}
+	req.Body = bodyBuf.Bytes()
+
 	return req, nil
 }
 
 func buildUpstreamRequest(req *Request) []byte {
 	var b bytes.Buffer
-	fmt.Fprintf(&b, "%s %s HTTP/1.0\r\n", req.Method, req.Target)
+	fmt.Fprintf(&b, "%s %s %s\r\n", req.Method, req.Target, req.Version)
 	for _, h := range req.Headers {
 		fmt.Fprintf(&b, "%s\r\n", h)
 	}
 	b.WriteString("Connection: close\r\n")
 	b.WriteString("\r\n")
+	if len(req.Body) > 0 {
+		b.Write(req.Body)
+	}
 	return b.Bytes()
 }
 
@@ -89,6 +134,77 @@ func upstreamAddr(req *Request) (string, error) {
 	return target, nil
 }
 
+func readUpstreamResponse(r *bufio.Reader) ([]byte, error) {
+	statusLine, err := readLine(r)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	buf.WriteString(statusLine + "\r\n")
+
+	contentLength := -1
+	isChunked := false
+
+	for {
+		header, err := readLine(r)
+		if err != nil {
+			return nil, err
+		}
+		buf.WriteString(header + "\r\n")
+
+		if header == "" {
+			break
+		}
+
+		lower := strings.ToLower(header)
+		if strings.HasPrefix(lower, "content-length:") {
+			fmt.Sscanf(lower, "content-length: %d", &contentLength)
+		} else if strings.HasPrefix(lower, "transfer-encoding:") && strings.Contains(lower, "chunked") {
+			isChunked = true
+		}
+	}
+
+	if isChunked {
+		for {
+			chunkHeader, err := readLine(r)
+			if err != nil {
+				return nil, err
+			}
+			buf.WriteString(chunkHeader + "\r\n")
+
+			var chunkSize int
+			fmt.Sscanf(chunkHeader, "%x", &chunkSize)
+
+			if chunkSize == 0 {
+				empty, _ := readLine(r)
+				buf.WriteString(empty + "\r\n")
+				break
+			}
+
+			chunkData := make([]byte, chunkSize)
+			if _, err := io.ReadFull(r, chunkData); err != nil {
+				return nil, err
+			}
+			buf.Write(chunkData)
+
+			crlf, _ := readLine(r)
+			buf.WriteString(crlf + "\r\n")
+		}
+	} else if contentLength > 0 {
+		body := make([]byte, contentLength)
+		if _, err := io.ReadFull(r, body); err != nil {
+			return nil, err
+		}
+		buf.Write(body)
+	} else if contentLength == -1 {
+		rest, _ := ioutil.ReadAll(r)
+		buf.Write(rest)
+	}
+
+	return buf.Bytes(), nil
+}
+
 func fetchFromUpstream(req *Request) ([]byte, error) {
 	addr, err := upstreamAddr(req)
 	if err != nil {
@@ -105,7 +221,8 @@ func fetchFromUpstream(req *Request) ([]byte, error) {
 		return nil, fmt.Errorf("write upstream request: %w", err)
 	}
 
-	data, err := ioutil.ReadAll(conn)
+	r := bufio.NewReader(conn)
+	data, err := readUpstreamResponse(r)
 	if err != nil {
 		return nil, fmt.Errorf("read upstream response: %w", err)
 	}
@@ -115,7 +232,7 @@ func fetchFromUpstream(req *Request) ([]byte, error) {
 func errResponse(code int, msg string) []byte {
 	body := fmt.Sprintf("%d %s\n", code, msg)
 	return []byte(fmt.Sprintf(
-		"HTTP/1.0 %d %s\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
+		"HTTP %d %s\r\nContent-Type: text/plain\r\nContent-Length: %d\r\nConnection: close\r\n\r\n%s",
 		code, msg, len(body), body,
 	))
 }
