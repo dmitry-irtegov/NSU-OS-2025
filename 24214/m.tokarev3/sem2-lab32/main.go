@@ -24,7 +24,7 @@ func main() {
 		proxy.Stop()
 	}()
 
-	log.Printf("caching proxy listening on %s (multithreaded)", *addr)
+	log.Printf("caching proxy listening on %s (multi-thread goroutine-per-connection)", *addr)
 	if err := proxy.Run(); err != nil {
 		log.Fatal(err)
 	}
