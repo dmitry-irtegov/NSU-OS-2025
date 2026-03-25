@@ -2,194 +2,186 @@ package client
 
 import (
 	"fmt"
-	"laba/parser"
 	"net"
 	"net/url"
 	"strconv"
-	"syscall"
-	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
+
+const linesPerPage = 25
 
 var (
-	_continue      = []byte("Press space to scroll down")
-	_clearContinue = []byte("\r\033[K")
+	prompt      = []byte("Press space to scroll down")
+	clearPrompt = []byte("\r\033[K")
 )
-
-const _requestString = "GET %s HTTP/1.0\r\nHost: %s\r\n\r\n"
 
 type Client struct {
 	socket      int
-	oldTerminal syscall.Termios
-	mask        syscall.FdSet
-	pars        *parser.Parser
+	oldTerminal unix.Termios
+	mask        unix.FdSet
+	buf         []byte
+	headerDone  bool
+	lineCount   int
 }
 
-func NewClient(pars *parser.Parser, address string) (*Client, error) {
+func NewClient(address string) (*Client, error) {
 	data, err := url.Parse(address)
 	if err != nil {
 		return nil, err
 	}
-	ip, err := net.LookupIP(data.Hostname())
+	ips, err := net.LookupIP(data.Hostname())
 	if err != nil {
 		return nil, err
 	}
-	sk, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	sk, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
 		return nil, err
 	}
-	var port = 80
+	port := 80
 	if data.Port() != "" {
 		port, err = strconv.Atoi(data.Port())
 		if err != nil {
-			return nil, fmt.Errorf("invalid port number: %w", err)
+			unix.Close(sk)
+			return nil, fmt.Errorf("invalid port: %v", err)
 		}
 	}
-	connInfo := syscall.SockaddrInet4{Port: port}
-	copy(connInfo.Addr[:], ip[0].To4())
-	if err := syscall.Connect(sk, &connInfo); err != nil {
+	addr := &unix.SockaddrInet4{Port: port}
+	copy(addr.Addr[:], ips[0].To4())
+	if err := unix.Connect(sk, addr); err != nil {
+		unix.Close(sk)
 		return nil, err
 	}
-	ur := "/"
+	path := "/"
 	if data.RequestURI() != "" {
-		ur = data.RequestURI()
+		path = data.RequestURI()
 	}
-	req := fmt.Sprintf(_requestString, ur, data.Hostname())
-	_, err = syscall.Write(sk, []byte(req))
-	if err != nil {
+	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, data.Hostname())
+	if _, err = unix.Write(sk, []byte(req)); err != nil {
+		unix.Close(sk)
 		return nil, err
 	}
-	return &Client{socket: sk, pars: pars}, nil
-}
-
-func getTerminalWidth() int {
-	type winsize struct {
-		Row    uint16
-		Col    uint16
-		Xpixel uint16
-		Ypixel uint16
-	}
-	ws := winsize{}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdout),
-		uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&ws)))
-	if errno != 0 || ws.Col == 0 {
-		return 80
-	}
-	return int(ws.Col)
+	return &Client{socket: sk}, nil
 }
 
 func (c *Client) Run() error {
-	if err := c.terminalConfig(); err != nil {
+	if err := c.setRawMode(); err != nil {
 		return err
 	}
-	defer c.resetTerminalConfig()
+	defer c.restoreTerminal()
 
-	c.pars.SetWidth(getTerminalWidth())
 	maxFd := c.socket + 1
 	socketOpen := true
 	promptShown := false
 
 	for {
-		if !socketOpen && !c.pars.IsMaxCountGiven() {
-			if c.pars.Len() > 0 {
-				c.pars.Flush()
-				strs, _ := c.pars.Parse(nil)
-				if err := c.writeLines(strs); err != nil {
-					return err
-				}
+		// Socket closed and not paused — flush remaining and exit
+		if !socketOpen && c.lineCount < linesPerPage {
+			c.outputLines()
+			if c.lineCount >= linesPerPage {
 				continue
+			}
+			if len(c.buf) > 0 {
+				unix.Write(1, c.buf)
+				unix.Write(1, []byte("\r\n"))
 			}
 			return nil
 		}
 
 		c.fdZero()
-		if socketOpen {
+		if socketOpen && c.lineCount < linesPerPage {
 			c.fdSet(c.socket)
 		}
-		if c.pars.IsMaxCountGiven() {
-			c.fdSet(syscall.Stdin)
+		if c.lineCount >= linesPerPage {
+			c.fdSet(0)
 			if !promptShown {
-				if _, err := syscall.Write(syscall.Stdout, _continue); err != nil {
-					return err
-				}
+				unix.Write(1, prompt)
 				promptShown = true
 			}
-		} else {
-			promptShown = false
 		}
 
-		if _, err := syscall.Select(maxFd, &c.mask, nil, nil, nil); err != nil {
+		if _, err := unix.Select(maxFd, &c.mask, nil, nil, nil); err != nil {
 			return err
 		}
 
-		if c.fdIsSet(syscall.Stdin) {
-			if err := c.readTerminal(); err != nil {
+		if c.fdIsSet(0) {
+			var b [1]byte
+			n, err := unix.Read(0, b[:])
+			if err != nil {
 				return err
 			}
-			strs, _ := c.pars.Parse(nil)
-			if err := c.writeLines(strs); err != nil {
-				return err
+			if n > 0 && b[0] == ' ' {
+				unix.Write(1, clearPrompt)
+				c.lineCount = 0
+				promptShown = false
+				c.outputLines()
 			}
 		}
 
 		if socketOpen && c.fdIsSet(c.socket) {
-			buf := make([]byte, 4096)
-			n, err := syscall.Read(c.socket, buf)
+			var tmp [4096]byte
+			n, err := unix.Read(c.socket, tmp[:])
 			if n > 0 {
-				strs, _ := c.pars.Parse(buf[:n])
-				if err := c.writeLines(strs); err != nil {
-					return err
-				}
+				c.buf = append(c.buf, tmp[:n]...)
+				c.skipHeader()
+				c.outputLines()
 			}
 			if err != nil || n == 0 {
-				syscall.Close(c.socket)
+				unix.Close(c.socket)
 				socketOpen = false
 			}
 		}
 	}
 }
 
-func (c *Client) terminalConfig() error {
-	term := syscall.Termios{}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin),
-		uintptr(syscall.TCGETS), uintptr(unsafe.Pointer(&term)))
-	c.oldTerminal = term
-	if errno != 0 {
-		return errno
+func (c *Client) outputLines() {
+	for c.lineCount < linesPerPage {
+		idx := -1
+		for i, b := range c.buf {
+			if b == '\n' {
+				idx = i
+				break
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		end := idx
+		if end > 0 && c.buf[end-1] == '\r' {
+			end--
+		}
+		unix.Write(1, c.buf[:end])
+		unix.Write(1, []byte("\r\n"))
+		c.buf = c.buf[idx+1:]
+		c.lineCount++
 	}
-	term.Lflag &^= syscall.ICANON | syscall.ECHO
-	_, _, errno = syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin),
-		uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&term)))
-	if errno != 0 {
-		return errno
-	}
-	return nil
 }
 
-func (c *Client) resetTerminalConfig() error {
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdin),
-		uintptr(syscall.TCSETS), uintptr(unsafe.Pointer(&c.oldTerminal)))
-	if errno != 0 {
-		return errno
+func (c *Client) skipHeader() {
+	if c.headerDone {
+		return
 	}
-	return nil
+	for i := 0; i <= len(c.buf)-4; i++ {
+		if c.buf[i] == '\r' && c.buf[i+1] == '\n' && c.buf[i+2] == '\r' && c.buf[i+3] == '\n' {
+			c.buf = c.buf[i+4:]
+			c.headerDone = true
+			return
+		}
+	}
 }
 
-func (c *Client) readTerminal() error {
-	buf := make([]byte, 1)
-	n, err := syscall.Read(syscall.Stdin, buf)
+func (c *Client) setRawMode() error {
+	term, err := unix.IoctlGetTermios(0, unix.TCGETS)
 	if err != nil {
 		return err
 	}
-	if n > 0 {
-		if buf[0] == ' ' {
-			_, err = syscall.Write(syscall.Stdout, _clearContinue)
-			if err != nil {
-				return err
-			}
-			c.pars.ResetCountGiven()
-		}
-	}
-	return nil
+	c.oldTerminal = *term
+	term.Lflag &^= unix.ICANON | unix.ECHO
+	return unix.IoctlSetTermios(0, unix.TCSETS, term)
+}
+
+func (c *Client) restoreTerminal() {
+	unix.IoctlSetTermios(0, unix.TCSETS, &c.oldTerminal)
 }
 
 func (c *Client) fdZero() {
@@ -204,13 +196,4 @@ func (c *Client) fdSet(fd int) {
 
 func (c *Client) fdIsSet(fd int) bool {
 	return c.mask.Bits[fd/64]&(1<<(uint(fd)%64)) != 0
-}
-
-func (c *Client) writeLines(lines []string) error {
-	for _, line := range lines {
-		if _, err := syscall.Write(syscall.Stdout, []byte(line+"\r\n")); err != nil {
-			return err
-		}
-	}
-	return nil
 }

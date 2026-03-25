@@ -1,18 +1,16 @@
 package main
 
 import (
-	"laba/client"
-	"laba/parser"
 	"log"
 	"os"
+	"sem2-lab28/client"
 )
 
 func main() {
 	if len(os.Args) != 2 {
-		log.Fatal("Usage: go run main.go <address>")
+		log.Fatal("Usage: go run main.go <url>")
 	}
-	ps := parser.NewParser()
-	cl, err := client.NewClient(ps, os.Args[1])
+	cl, err := client.NewClient(os.Args[1])
 	if err != nil {
 		log.Fatal(err)
 	}
