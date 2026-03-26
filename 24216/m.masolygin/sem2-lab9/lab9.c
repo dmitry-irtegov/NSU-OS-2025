@@ -4,43 +4,68 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHECK_INTERVAL 1000000LL
+#define WORK_BLOCK 1000000LL
 
-static volatile sig_atomic_t stop_flag = 0;
+int stop_requested = 0;
+unsigned long long global_max_iters = 0;
+pthread_mutex_t sync_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     int thread_id;
     int num_threads;
-} thread_args_t;
+    double final_sum;
+    unsigned long long iters;
+} thread_ctx_t;
 
-static void sigint_handler(int sig) {
-    (void)sig;
-    stop_flag = 1;
+void* signal_catcher_thread(void* arg) {
+    sigset_t* wait_set = (sigset_t*)arg;
+    int caught_signal;
+
+    if (sigwait(wait_set, &caught_signal) == 0) {
+        pthread_mutex_lock(&sync_mutex);
+        stop_requested = 1;
+        pthread_mutex_unlock(&sync_mutex);
+    }
+    return NULL;
 }
 
 void* calc_pi_part(void* arg) {
-    thread_args_t* args = (thread_args_t*)arg;
+    thread_ctx_t* ctx = (thread_ctx_t*)arg;
 
-    double* partial_sum = malloc(sizeof(double));
-    if (partial_sum == NULL) {
-        fprintf(stderr, "Error allocating memory for partial sum\n");
-        pthread_exit(NULL);
-    }
+    ctx->final_sum = 0.0;
+    ctx->iters = 0;
 
-    *partial_sum = 0.0;
+    long long current_idx = ctx->thread_id;
 
-    long long block = args->thread_id;
-    while (!stop_flag) {
-        long long start = block * CHECK_INTERVAL;
-        long long end = start + CHECK_INTERVAL;
-        for (long long i = start; i < end; i++) {
-            *partial_sum += 1.0 / (i * 4.0 + 1.0);
-            *partial_sum -= 1.0 / (i * 4.0 + 3.0);
+    while (1) {
+        double block_sum = 0.0;
+
+        for (long long k = 0; k < WORK_BLOCK; k++) {
+            block_sum += 1.0 / (current_idx * 4.0 + 1.0);
+            block_sum -= 1.0 / (current_idx * 4.0 + 3.0);
+            current_idx += ctx->num_threads;
         }
-        block += args->num_threads;
+
+        ctx->final_sum += block_sum;
+        ctx->iters += WORK_BLOCK;
+
+        pthread_mutex_lock(&sync_mutex);
+
+        if (ctx->iters > global_max_iters) {
+            global_max_iters = ctx->iters;
+        }
+
+        int is_stopping = stop_requested;
+        unsigned long long target_iters = global_max_iters;
+
+        pthread_mutex_unlock(&sync_mutex);
+
+        if (is_stopping && ctx->iters >= target_iters) {
+            break;
+        }
     }
 
-    pthread_exit(partial_sum);
+    pthread_exit(NULL);
 }
 
 int main(int argc, char* argv[]) {
@@ -55,60 +80,70 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = sigint_handler;
-    sigemptyset(&sa.sa_mask);
-    if (sigaction(SIGINT, &sa, NULL) != 0) {
-        perror("sigaction");
+    sigset_t sig_mask;
+    sigemptyset(&sig_mask);
+    sigaddset(&sig_mask, SIGINT);
+
+    if (pthread_sigmask(SIG_BLOCK, &sig_mask, NULL) != 0) {
+        perror("Error blocking signals");
         return 1;
     }
 
     pthread_t* threads = malloc(num_threads * sizeof(pthread_t));
-    thread_args_t* args = malloc(num_threads * sizeof(thread_args_t));
+    thread_ctx_t* ctx_array = malloc(num_threads * sizeof(thread_ctx_t));
 
-    if (threads == NULL || args == NULL) {
+    if (threads == NULL || ctx_array == NULL) {
         fprintf(stderr, "Error allocating memory\n");
         free(threads);
-        free(args);
+        free(ctx_array);
+        return 1;
+    }
+
+    pthread_t sig_thread;
+    int error =
+        pthread_create(&sig_thread, NULL, signal_catcher_thread, &sig_mask);
+    if (error != 0) {
+        fprintf(stderr, "Error creating signal thread: %s\n", strerror(error));
         return 1;
     }
 
     for (int i = 0; i < num_threads; i++) {
-        args[i].thread_id = i;
-        args[i].num_threads = num_threads;
+        ctx_array[i].thread_id = i;
+        ctx_array[i].num_threads = num_threads;
 
-        int error = pthread_create(&threads[i], NULL, calc_pi_part, &args[i]);
+        error = pthread_create(&threads[i], NULL, calc_pi_part, &ctx_array[i]);
         if (error != 0) {
-            fprintf(stderr, "Error creating thread %d: %s\n", i, strerror(error));
+            fprintf(stderr, "Error creating thread %d: %s\n", i,
+                    strerror(error));
             free(threads);
-            free(args);
-            return 1;
+            free(ctx_array);
+            exit(1);
         }
     }
 
-    printf("Running... press Ctrl+C to stop and print pi approximation.\n");
+    printf(
+        "Running with %d threads... press Ctrl+C to stop and print pi "
+        "approximation.\n",
+        num_threads);
 
     double pi = 0.0;
     for (int i = 0; i < num_threads; i++) {
-        double* partial_sum = NULL;
-        int error = pthread_join(threads[i], (void**)&partial_sum);
+        error = pthread_join(threads[i], NULL);
         if (error != 0) {
-            fprintf(stderr, "Error joining thread %d: %s\n", i, strerror(error));
-            free(threads);
-            free(args);
-            return 1;
+            fprintf(stderr, "Error joining thread %d: %s\n", i,
+                    strerror(error));
+            exit(1);
         }
-        if (partial_sum != NULL) {
-            pi += *partial_sum;
-            free(partial_sum);
-        }
+
+        pi += ctx_array[i].final_sum;
     }
 
     pi *= 4.0;
     printf("pi done - %.15g\n", pi);
 
     free(threads);
-    free(args);
+    free(ctx_array);
+    pthread_mutex_destroy(&sync_mutex);
+
     return 0;
 }
