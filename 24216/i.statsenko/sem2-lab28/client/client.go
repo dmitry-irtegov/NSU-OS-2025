@@ -169,10 +169,11 @@ func (c *Client) outputLines() error {
 		if end > 0 && c.buf[end-1] == '\r' {
 			end--
 		}
-		if _, err := unix.Write(1, c.buf[:end]); err != nil {
-			return err
-		}
-		if _, err := unix.Write(1, []byte{'\r', '\n'}); err != nil {
+		tmp := make([]byte, end+2)
+		copy(tmp, c.buf[:end])
+		tmp[end] = '\r'
+		tmp[end+1] = '\n'
+		if _, err := unix.Write(1, tmp); err != nil {
 			return err
 		}
 		c.buf = c.buf[idx+1:]
