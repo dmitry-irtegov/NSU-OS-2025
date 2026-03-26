@@ -76,13 +76,18 @@ func (c *Client) Run() error {
 
 	for {
 		if !socketOpen && c.lineCount < linesPerPage {
-			c.outputLines()
+			if err := c.outputLines(); err != nil {
+				return err
+			}
 			if c.lineCount >= linesPerPage {
 				continue
 			}
 			if len(c.buf) > 0 {
-				unix.Write(1, c.buf)
-				unix.Write(1, []byte("\r\n"))
+				c.buf = append(c.buf, '\r', '\n')
+				_, err := unix.Write(1, c.buf)
+				if err != nil {
+					return err
+				}
 			}
 			return nil
 		}
@@ -94,7 +99,10 @@ func (c *Client) Run() error {
 		if c.lineCount >= linesPerPage {
 			c.fdSet(0)
 			if !promptShown {
-				unix.Write(1, prompt)
+				_, err := unix.Write(1, prompt)
+				if err != nil {
+					return err
+				}
 				promptShown = true
 			}
 		}
@@ -113,10 +121,15 @@ func (c *Client) Run() error {
 				return err
 			}
 			if n > 0 && b[0] == ' ' {
-				unix.Write(1, clearPrompt)
+				_, err = unix.Write(1, clearPrompt)
+				if err != nil {
+					return err
+				}
 				c.lineCount = 0
 				promptShown = false
-				c.outputLines()
+				if err = c.outputLines(); err != nil {
+					return err
+				}
 			}
 		}
 
@@ -127,7 +140,9 @@ func (c *Client) Run() error {
 				c.buf = append(c.buf, tmp[:n]...)
 				c.skipHeader()
 				if c.lineCount < linesPerPage {
-					c.outputLines()
+					if err := c.outputLines(); err != nil {
+						return err
+					}
 				}
 			}
 			if err != nil || n == 0 {
@@ -138,7 +153,7 @@ func (c *Client) Run() error {
 	}
 }
 
-func (c *Client) outputLines() {
+func (c *Client) outputLines() error {
 	for c.lineCount < linesPerPage {
 		idx := -1
 		for i, b := range c.buf {
@@ -154,11 +169,16 @@ func (c *Client) outputLines() {
 		if end > 0 && c.buf[end-1] == '\r' {
 			end--
 		}
-		unix.Write(1, c.buf[:end])
-		unix.Write(1, []byte("\r\n"))
+		if _, err := unix.Write(1, c.buf[:end]); err != nil {
+			return err
+		}
+		if _, err := unix.Write(1, []byte{'\r', '\n'}); err != nil {
+			return err
+		}
 		c.buf = c.buf[idx+1:]
 		c.lineCount++
 	}
+	return nil
 }
 
 func (c *Client) skipHeader() {
