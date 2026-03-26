@@ -75,7 +75,6 @@ func (c *Client) Run() error {
 	promptShown := false
 
 	for {
-		// Socket closed and not paused — flush remaining and exit
 		if !socketOpen && c.lineCount < linesPerPage {
 			c.outputLines()
 			if c.lineCount >= linesPerPage {
@@ -89,7 +88,7 @@ func (c *Client) Run() error {
 		}
 
 		c.fdZero()
-		if socketOpen && c.lineCount < linesPerPage {
+		if socketOpen {
 			c.fdSet(c.socket)
 		}
 		if c.lineCount >= linesPerPage {
@@ -101,6 +100,9 @@ func (c *Client) Run() error {
 		}
 
 		if _, err := unix.Select(maxFd, &c.mask, nil, nil, nil); err != nil {
+			if err == unix.EINTR {
+				continue
+			}
 			return err
 		}
 
@@ -124,7 +126,9 @@ func (c *Client) Run() error {
 			if n > 0 {
 				c.buf = append(c.buf, tmp[:n]...)
 				c.skipHeader()
-				c.outputLines()
+				if c.lineCount < linesPerPage {
+					c.outputLines()
+				}
 			}
 			if err != nil || n == 0 {
 				unix.Close(c.socket)
@@ -177,6 +181,8 @@ func (c *Client) setRawMode() error {
 	}
 	c.oldTerminal = *term
 	term.Lflag &^= unix.ICANON | unix.ECHO
+	term.Cc[unix.VMIN] = 1
+	term.Cc[unix.VTIME] = 0
 	return unix.IoctlSetTermios(0, unix.TCSETS, term)
 }
 
