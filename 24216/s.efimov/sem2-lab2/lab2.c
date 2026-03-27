@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <semaphore.h>
 
 void print_line(char* line) {
     for (int i = 0; i < 10; i++) {
