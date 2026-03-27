@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -139,7 +140,7 @@ int main(int argc, char* argv[]) {
     }
 
     pi *= 4.0;
-    printf("pi done - %.15g\n", pi);
+    printf("\npi done - %.15g\n", pi);
 
     free(threads);
     free(ctx_array);
