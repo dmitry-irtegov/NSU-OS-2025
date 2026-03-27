@@ -69,6 +69,7 @@ func (c *Client) Run() error {
 		return err
 	}
 	defer c.restoreTerminal()
+	defer unix.Close(c.socket)
 
 	maxFd := c.socket + 1
 	socketOpen := true
