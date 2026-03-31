@@ -49,6 +49,7 @@ int main() {
 		}
 		n++;
 	}
+    
 	for (int i = 0; i < n; i++) {
 		int code = pthread_join(thread[i], NULL);
 		if (code != 0) {
