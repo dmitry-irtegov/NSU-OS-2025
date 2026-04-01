@@ -4,6 +4,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 
 #ifndef NUM_STEPS
 #define NUM_STEPS 200000000
@@ -26,8 +27,8 @@ static void *compute_partial_sum(void *arg) {
     *partial = 0.0;
 
     for (long i = data->thread_id; i < NUM_STEPS; i += data->num_threads) {
-        *partial += 1.0 / (i * 4.0 + 1.0);
-        *partial -= 1.0 / (i * 4.0 + 3.0);
+        *partial += 1.0 / (4.0 * i + 1.0);
+        *partial -= 1.0 / (4.0 * i + 3.0);
     }
 
     pthread_exit(partial);
@@ -58,6 +59,14 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    struct timespec start, end;
+    if (clock_gettime(CLOCK_MONOTONIC, &start) != 0) {
+        perror("clock_gettime");
+        free(threads);
+        free(thread_data);
+        return EXIT_FAILURE;
+    }
+
     for (long i = 0; i < num_threads; i++) {
         thread_data[i].thread_id = i;
         thread_data[i].num_threads = num_threads;
@@ -65,11 +74,9 @@ int main(int argc, char **argv) {
         int ret = pthread_create(&threads[i], NULL, compute_partial_sum, &thread_data[i]);
         if (ret != 0) {
             fprintf(stderr, "pthread_create failed: %s\n", strerror(ret));
-
             for (long j = 0; j < i; j++) {
                 pthread_join(threads[j], NULL);
             }
-
             free(threads);
             free(thread_data);
             return EXIT_FAILURE;
@@ -80,6 +87,7 @@ int main(int argc, char **argv) {
 
     for (long i = 0; i < num_threads; i++) {
         void *retval = NULL;
+
         int ret = pthread_join(threads[i], &retval);
         if (ret != 0) {
             fprintf(stderr, "pthread_join failed: %s\n", strerror(ret));
@@ -88,24 +96,35 @@ int main(int argc, char **argv) {
             return EXIT_FAILURE;
         }
 
-        if (retval != NULL) {
-            double *partial = (double *)retval;
-            pi += *partial;
-            free(partial);
-        } else {
+        if (retval == NULL) {
             fprintf(stderr, "Thread %ld returned NULL\n", i);
             free(threads);
             free(thread_data);
             return EXIT_FAILURE;
         }
+
+        double *partial = (double *)retval;
+        pi += *partial;
+        free(partial);
     }
 
     pi *= 4.0;
 
+    if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) {
+        perror("clock_gettime");
+        free(threads);
+        free(thread_data);
+        return EXIT_FAILURE;
+    }
+
+    double elapsed = (end.tv_sec - start.tv_sec)
+                   + (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+
     printf("pi done - %.15g\n", pi);
+    printf("time: %.6f sec\n", elapsed);
 
     free(threads);
     free(thread_data);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
