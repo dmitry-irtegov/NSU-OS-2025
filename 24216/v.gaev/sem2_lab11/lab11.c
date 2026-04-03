@@ -1,84 +1,82 @@
-#include <pthread.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#include <errno.h>
+#include <sched.h>
 
-pthread_mutex_t m1, m2;
+pthread_mutex_t m_parent;
+pthread_mutex_t m_child;
+pthread_mutex_t m_common;
 
-void* child_task(void* arg) {
-    (void)arg; 
+void *child_task(void *arg) {
+    (void)arg;
 
-    pthread_mutex_t *my_m = &m2;
-    pthread_mutex_t *other_m = &m1;
-
-    pthread_mutex_lock(my_m);
+    pthread_mutex_lock(&m_child);
 
     for (int i = 1; i <= 10; i++) {
-        pthread_mutex_lock(other_m);
+        pthread_mutex_lock(&m_parent);
         
         fprintf(stderr, "Дочерняя нить: строка %d\n", i);
         
-        pthread_mutex_unlock(my_m);
-
-        pthread_mutex_t *temp = my_m;
-        my_m = other_m;
-        other_m = temp;
+        pthread_mutex_unlock(&m_child);
+        pthread_mutex_lock(&m_common);
+        pthread_mutex_unlock(&m_parent);
+        pthread_mutex_lock(&m_child);
+        pthread_mutex_unlock(&m_common);
     }
 
-    pthread_mutex_unlock(my_m);
+    pthread_mutex_unlock(&m_child);
     return NULL;
 }
 
-int main(int argc, char *argv[]) {
-    (void)argc;
-    (void)argv;
-
-    pthread_t thread_id;
+int main(void) {
+    pthread_t thread;
     pthread_mutexattr_t attr;
-    int s;
 
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
 
-    pthread_mutex_init(&m1, &attr);
-    pthread_mutex_init(&m2, &attr);
+    pthread_mutex_init(&m_parent, &attr);
+    pthread_mutex_init(&m_child, &attr);
+    pthread_mutex_init(&m_common, &attr);
+    pthread_mutexattr_destroy(&attr);
 
-    pthread_mutex_t *my_m = &m1;
-    pthread_mutex_t *other_m = &m2;
-
-    pthread_mutex_lock(my_m);
-
-    s = pthread_create(&thread_id, NULL, child_task, NULL);
-    if (s != 0) {
-        fprintf(stderr, "Ошибка создания нити: %s\n", strerror(s));
+    pthread_mutex_lock(&m_parent);
+    
+    if (pthread_create(&thread, NULL, child_task, NULL) != 0) {
+        perror("Ошибка создания нити");
         exit(EXIT_FAILURE);
     }
 
-    sleep(1);
+    while (1) {
+        int err = pthread_mutex_trylock(&m_child);
+        if (err == EBUSY) {
+            break;
+        }
+        if (err == 0) {
+            pthread_mutex_unlock(&m_child);
+            sched_yield(); 
+        }
+    }
 
     for (int i = 1; i <= 10; i++) {
         fprintf(stderr, "Родительская нить: строка %d\n", i);
-        
-        pthread_mutex_unlock(my_m);
-        pthread_mutex_lock(other_m);
 
-        pthread_mutex_t *temp = my_m;
-        my_m = other_m;
-        other_m = temp;
+        pthread_mutex_lock(&m_common);
+        pthread_mutex_unlock(&m_parent);
+        pthread_mutex_lock(&m_child);
+        pthread_mutex_unlock(&m_common);
+        pthread_mutex_lock(&m_parent);
+        pthread_mutex_unlock(&m_child);
     }
 
-    pthread_mutex_unlock(my_m);
+    pthread_mutex_unlock(&m_parent);
+    
+    pthread_join(thread, NULL);
 
-    s = pthread_join(thread_id, NULL);
-    if (s != 0) {
-        fprintf(stderr, "Ошибка присоединения нити: %s\n", strerror(s));
-        exit(EXIT_FAILURE);
-    }
-
-    pthread_mutex_destroy(&m1);
-    pthread_mutex_destroy(&m2);
-    pthread_mutexattr_destroy(&attr);
+    pthread_mutex_destroy(&m_parent);
+    pthread_mutex_destroy(&m_child);
+    pthread_mutex_destroy(&m_common);
 
     fprintf(stderr, "Главная программа: все нити завершили работу.\n");
 
