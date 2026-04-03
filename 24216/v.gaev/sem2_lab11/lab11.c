@@ -7,24 +7,33 @@
 pthread_mutex_t m1, m2;
 
 void* child_task(void* arg) {
-    pthread_mutex_lock(&m2);
-    pthread_mutex_lock(&m1);
+    (void)arg; 
+
+    pthread_mutex_t *my_m = &m2;
+    pthread_mutex_t *other_m = &m1;
+
+    pthread_mutex_lock(my_m);
 
     for (int i = 1; i <= 10; i++) {
+        pthread_mutex_lock(other_m);
+        
         fprintf(stderr, "Дочерняя нить: строка %d\n", i);
-        if (i % 2 != 0) { 
-            pthread_mutex_unlock(&m2);
-            if (i < 10) pthread_mutex_lock(&m2);
-        } else {       
-            pthread_mutex_unlock(&m1);
-            if (i < 10) pthread_mutex_lock(&m1);
-        }
+        
+        pthread_mutex_unlock(my_m);
+
+        pthread_mutex_t *temp = my_m;
+        my_m = other_m;
+        other_m = temp;
     }
-    pthread_mutex_unlock(&m2);
+
+    pthread_mutex_unlock(my_m);
     return NULL;
 }
 
 int main(int argc, char *argv[]) {
+    (void)argc;
+    (void)argv;
+
     pthread_t thread_id;
     pthread_mutexattr_t attr;
     int s;
@@ -34,7 +43,11 @@ int main(int argc, char *argv[]) {
 
     pthread_mutex_init(&m1, &attr);
     pthread_mutex_init(&m2, &attr);
-    pthread_mutex_lock(&m1);
+
+    pthread_mutex_t *my_m = &m1;
+    pthread_mutex_t *other_m = &m2;
+
+    pthread_mutex_lock(my_m);
 
     s = pthread_create(&thread_id, NULL, child_task, NULL);
     if (s != 0) {
@@ -46,16 +59,16 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i <= 10; i++) {
         fprintf(stderr, "Родительская нить: строка %d\n", i);
-        if (i % 2 != 0) {
-            pthread_mutex_unlock(&m1);
-            if (i < 10) pthread_mutex_lock(&m2);
-        } else {
-            pthread_mutex_unlock(&m2);
-            if (i < 10) pthread_mutex_lock(&m1);
-        }
+        
+        pthread_mutex_unlock(my_m);
+        pthread_mutex_lock(other_m);
+
+        pthread_mutex_t *temp = my_m;
+        my_m = other_m;
+        other_m = temp;
     }
 
-    pthread_mutex_unlock(&m1);
+    pthread_mutex_unlock(my_m);
 
     s = pthread_join(thread_id, NULL);
     if (s != 0) {
