@@ -10,7 +10,7 @@ typedef struct {
 void *thread_routine(void *arg) {
     ThreadData *data = (ThreadData *)arg;
     for (int i = 0; i < data->count; i++) {
-        printf("%s\n", data->strings[i]);
+        fprintf(stderr, "%s\n", data->strings[i]);
     }
     return NULL;
 }
