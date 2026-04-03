@@ -7,11 +7,20 @@
 pthread_mutex_t m1, m2;
 
 void* child_task(void* arg) {
+    pthread_mutex_lock(&m2);
+    pthread_mutex_lock(&m1);
+
     for (int i = 1; i <= 10; i++) {
-        pthread_mutex_lock(&m2);
         fprintf(stderr, "Дочерняя нить: строка %d\n", i);
-        pthread_mutex_unlock(&m1);
+        if (i % 2 != 0) { 
+            pthread_mutex_unlock(&m2);
+            if (i < 10) pthread_mutex_lock(&m2);
+        } else {       
+            pthread_mutex_unlock(&m1);
+            if (i < 10) pthread_mutex_lock(&m1);
+        }
     }
+    pthread_mutex_unlock(&m2);
     return NULL;
 }
 
@@ -25,9 +34,7 @@ int main(int argc, char *argv[]) {
 
     pthread_mutex_init(&m1, &attr);
     pthread_mutex_init(&m2, &attr);
-
     pthread_mutex_lock(&m1);
-    pthread_mutex_lock(&m2);
 
     s = pthread_create(&thread_id, NULL, child_task, NULL);
     if (s != 0) {
@@ -35,14 +42,20 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    for (int i = 1; i <= 10; i++) {
-        if (i > 1) {
-            pthread_mutex_lock(&m1);
-        }
+    sleep(1);
 
+    for (int i = 1; i <= 10; i++) {
         fprintf(stderr, "Родительская нить: строка %d\n", i);
-        pthread_mutex_unlock(&m2);
+        if (i % 2 != 0) {
+            pthread_mutex_unlock(&m1);
+            if (i < 10) pthread_mutex_lock(&m2);
+        } else {
+            pthread_mutex_unlock(&m2);
+            if (i < 10) pthread_mutex_lock(&m1);
+        }
     }
+
+    pthread_mutex_unlock(&m1);
 
     s = pthread_join(thread_id, NULL);
     if (s != 0) {
