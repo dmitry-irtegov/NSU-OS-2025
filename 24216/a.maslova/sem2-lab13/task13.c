@@ -14,8 +14,9 @@ void* thread_func(void* arg) {
         }
         fprintf(stderr, "Child: %d\n", i + 1);
         turn = 0;
-        pthread_cond_signal(&cond);
+    
         pthread_mutex_unlock(&mutex);
+	pthread_cond_signal(&cond);
     }
     return NULL;
 }
@@ -35,8 +36,9 @@ int main() {
         }
         fprintf(stderr, "Parent: %d\n", i + 1);
         turn = 1;
-        pthread_cond_signal(&cond);
+ 
         pthread_mutex_unlock(&mutex);
+	pthread_cond_signal(&cond);
     }
     
     if (pthread_join(thread, NULL)) {
