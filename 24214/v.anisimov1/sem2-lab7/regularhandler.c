@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <stdio.h> 
 #include <sys/errno.h>
 #include <sys/stat.h>
