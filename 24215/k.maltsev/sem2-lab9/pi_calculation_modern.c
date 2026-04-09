@@ -7,7 +7,6 @@
 #define CHECK_INTERVAL 1000000L
 
 static volatile sig_atomic_t stop_requested = 0;
-static int should_finish = 0;
 static pthread_barrier_t barrier;
 
 typedef struct {
@@ -46,16 +45,12 @@ void *calc_pi(void *arg)
         base += CHECK_INTERVAL * n_threads;
 
         int rc = pthread_barrier_wait(&barrier);
-
-        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
-            if (stop_requested) {
-                should_finish = 1;
-            }
+        if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
+            free(partial_sum);
+            pthread_exit(NULL);
         }
 
-        pthread_barrier_wait(&barrier);
-
-        if (should_finish) {
+        if (stop_requested) {
             break;
         }
     }
@@ -109,7 +104,6 @@ int main(int argc, char **argv)
         if (pthread_create(&threads[i], NULL, calc_pi, &thread_data[i]) != 0) {
             perror("pthread_create");
             stop_requested = 1;
-            should_finish = 1;
 
             for (int j = 0; j < i; ++j) {
                 void *status = NULL;
