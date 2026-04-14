@@ -22,7 +22,6 @@ ClientConnection::~ClientConnection() {
     if (response) {
         response->unsubscribe(socketFd);
     }
-    ::close(socketFd);
 }
 
 bool ClientConnection::serviceRead(ResponseCache &cache,
@@ -147,7 +146,6 @@ ServerConnection::ServerConnection(int socketFd,
 
 ServerConnection::~ServerConnection() {
     request->unsubscribe(socketFd);
-    ::close(socketFd);
 }
 
 bool ServerConnection::serviceRead(ResponseCache &cache,

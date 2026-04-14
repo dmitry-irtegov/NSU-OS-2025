@@ -180,6 +180,7 @@ void Proxy::disconnect(ConnectionInfo &connection) {
             entry.second--;
         }
     }
+    ::close(fd);
 }
 
 void Proxy::servicePending(ConnectionInfo &connection, SocketEvents events) {
