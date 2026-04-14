@@ -1,5 +1,7 @@
 #include "Connection.h"
+#include "ErrorResponse.h"
 #include "Http.h"
+#include "MessageBuffer.h"
 #include "ResponseCache.h"
 #include "unistd.h"
 #include <cstring>
@@ -47,8 +49,17 @@ bool ClientConnection::serviceRead(ResponseCache &cache,
         const char *ptr = writer.data();
         http::RequestLine::ParseInfo parseInfo;
 
-        if (http::RequestLine::parse(&ptr, ptr + writer.actualLength(),
-                                     requestLine, parseInfo)) {
+        bool parseResult;
+        try {
+            parseResult = http::RequestLine::parse(
+                &ptr, ptr + writer.actualLength(), requestLine, parseInfo);
+        } catch (std::runtime_error &re) {
+            parseResult = false;
+            std::cerr << "Bad request" << std::endl;
+            response = makeBadRequest(connectionManager);
+        }
+
+        if (parseResult) {
             std::cerr << "Request: "
                       << std::string(parseInfo.methodStart,
                                      parseInfo.versionEnd)
@@ -169,6 +180,7 @@ bool ServerConnection::serviceRead(ResponseCache &cache,
                       << std::string(parseInfo.versionStart,
                                      parseInfo.reasonEnd)
                       << std::endl;
+
             char *httpVersion = const_cast<char *>(parseInfo.versionStart);
             std::memcpy(httpVersion, "HTTP/1.0", 8);
 

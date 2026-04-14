@@ -74,7 +74,7 @@ struct ProxyArgs {
 
 static void printHelp(std::ostream &stream, const char *progamName) {
     stream << "Usage: " << progamName << " [-l PORT] [-r HOST[:PORT]] [-h]\n"
-           << " -l PORT        : The port to accept listen on. "
+           << " -l PORT        : The port to listen on. "
               "Default: 8080\n"
            << " -r HOST[:PORT] : The host/port to forward the request "
               "to when a full URI is not given. Default: localhost:80\n"

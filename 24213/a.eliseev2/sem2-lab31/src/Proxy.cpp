@@ -1,5 +1,6 @@
 #include "Proxy.h"
 #include "Connection.h"
+#include "ErrorResponse.h"
 #include "Http.h"
 #include "MessageBuffer.h"
 #include <arpa/inet.h>
@@ -108,8 +109,15 @@ Proxy::makeRequest(const http::RequestLine &line,
     uint16_t port = line.uri.port == 0 ? defaultPort : line.uri.port;
 
     bool pending;
+    int serverFd;
+
+    try {
+        serverFd = connect(host, port, pending);
+    } catch (std::runtime_error &re) {
+        return makeNoServer(*this);
+    }
+
     std::shared_ptr<MessageBuffer> response = std::make_shared<MessageBuffer>();
-    int serverFd = connect(host, port, pending);
     auto serverConnection =
         std::make_shared<ServerConnection>(serverFd, line, request, response);
 
