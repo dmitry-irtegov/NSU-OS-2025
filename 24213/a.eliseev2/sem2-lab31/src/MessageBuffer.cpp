@@ -77,9 +77,6 @@ void MessageBuffer::Writer::removeRange(const char *start, const char *end) {
     char *dataPtr = data.data();
     size_t startIndex = start - dataPtr;
     size_t endIndex = end - dataPtr;
-    if (endIndex > buffer->readableSize) {
-        reservedSize -= endIndex - std::max(buffer->readableSize, startIndex);
-    }
     if (startIndex < buffer->readableSize) {
         buffer->readableSize -= std::min(buffer->readableSize, endIndex) - startIndex; 
     }
