@@ -1,28 +1,29 @@
 #include <stdio.h>
-#include <pthread.h>
 #include <stdlib.h>
+#include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
 
-pthread_mutex_t mutex;
-pthread_cond_t cond;
-int turn = 0;
+pthread_mutex_t m[3];
+atomic_int child_ready = 0;
 
 void *child_task(void *arg) {
     (void)arg;
 
+    pthread_mutex_lock(&m[2]);
+    atomic_store(&child_ready, 1);
+
     for (int i = 1; i <= 10; i++) {
-        pthread_mutex_lock(&mutex);
-
-        while (turn != 1) {
-            pthread_cond_wait(&cond, &mutex);
-        }
-
+        int j = i - 1;
+        
+        pthread_mutex_lock(&m[(j + 0) % 3]);
+        
         fprintf(stderr, "Дочерняя нить: строка %d\n", i);
         
-        turn = 0;
-        pthread_cond_signal(&cond);
-
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&m[(j + 2) % 3]);
     }
+    
+    pthread_mutex_unlock(&m[(9 + 0) % 3]);
 
     return NULL;
 }
@@ -33,33 +34,43 @@ int main(void) {
 
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-    pthread_mutex_init(&mutex, &attr);
+
+    for (int i = 0; i < 3; i++) {
+        if (pthread_mutex_init(&m[i], &attr) != 0) {
+            perror("Ошибка инициализации мьютекса");
+            exit(EXIT_FAILURE);
+        }
+    }
     pthread_mutexattr_destroy(&attr);
-    pthread_cond_init(&cond, NULL);
+
+    pthread_mutex_lock(&m[0]);
 
     if (pthread_create(&thread, NULL, child_task, NULL) != 0) {
         perror("Ошибка создания нити");
         exit(EXIT_FAILURE);
     }
 
-    for (int i = 1; i <= 10; i++) {
-        pthread_mutex_lock(&mutex);
-
-        while (turn != 0) {
-            pthread_cond_wait(&cond, &mutex);
-        }
-
-        fprintf(stderr, "Родительская нить: строка %d\n", i);
-        
-        turn = 1;
-        pthread_cond_signal(&cond);
-
-        pthread_mutex_unlock(&mutex);
+    while (!atomic_load(&child_ready)) {
+        sched_yield(); 
     }
 
+    for (int i = 1; i <= 10; i++) {
+        int j = i - 1;
+        
+        pthread_mutex_lock(&m[(j + 1) % 3]);
+        
+        fprintf(stderr, "Родительская нить: строка %d\n", i);
+        
+        pthread_mutex_unlock(&m[(j + 0) % 3]);
+    }
+    
+    pthread_mutex_unlock(&m[(9 + 1) % 3]);
+
     pthread_join(thread, NULL);
-    pthread_mutex_destroy(&mutex);
-    pthread_cond_destroy(&cond);
+
+    for (int i = 0; i < 3; i++) {
+        pthread_mutex_destroy(&m[i]);
+    }
 
     fprintf(stderr, "Главная программа: все нити завершили работу.\n");
 
