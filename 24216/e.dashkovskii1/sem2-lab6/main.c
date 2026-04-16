@@ -44,9 +44,8 @@ int main(void) {
             len--;
         }
         memcpy(args[n].buf, line, len);
-        args[n].buf[len]     = '\n';
-        args[n].buf[len + 1] = '\0';
-        args[n].write_len    = len + 1;
+        args[n].buf[len]  = '\n';
+        args[n].write_len = len + 1;
         n++;
     }
 
