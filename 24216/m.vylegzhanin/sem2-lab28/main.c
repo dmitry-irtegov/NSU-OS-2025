@@ -172,7 +172,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    if (socket_open) close(sockfd);
+    struct linger sl;
+    sl.l_onoff = 1;
+    sl.l_linger = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+    close(sockfd);
+
     printf("\n"); 
     return 0;
 }
