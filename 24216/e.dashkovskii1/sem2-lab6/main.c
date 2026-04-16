@@ -12,14 +12,13 @@
 #define USLEEP_PER_CHAR 10000
 
 typedef struct {
-    char   buf[MAX_LINE_LEN + 2]; 
+    char   buf[MAX_LINE_LEN + 1]; 
     size_t write_len;            
 } thread_arg;
 
 void handle_error(int en, const char *msg) {
     if (en != 0) {
-        errno = en;
-        perror(msg);
+        fprintf(stderr, "%s: %s\n", msg, strerror(en));
         exit(EXIT_FAILURE);
     }
 }
