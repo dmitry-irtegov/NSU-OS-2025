@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -31,6 +32,8 @@ typedef struct {
     int pfd_server_idx;
     int eof_client;
     int eof_server;
+    int shut_wr_client;
+    int shut_wr_server;
 } Session;
 
 struct addrinfo *target_addrinfo = NULL;
@@ -42,15 +45,25 @@ void sig_handler(int signum) {
     }
 }
 
+void set_nonblock(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) return;
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
 void close_session(Session *s) {
     if (!s->active) {
         return;
     }
 
+    shutdown(s->fd_client, SHUT_RDWR);
     close(s->fd_client);
+
     if (s->fd_server >= 0) {
+        shutdown(s->fd_server, SHUT_RDWR);
         close(s->fd_server);
     }
+
     s->active = 0;
 }
 
@@ -140,7 +153,7 @@ int build_poll_array(struct pollfd *pfds, int listen_fd) {
             pfds[client_idx].events |= POLLIN;
         }
 
-        if (sessions[i].server_to_client.head < sessions[i].server_to_client.tail) {
+        if (sessions[i].server_to_client.head < sessions[i].server_to_client.tail && !sessions[i].shut_wr_client) {
             pfds[client_idx].events |= POLLOUT;
         }
 
@@ -154,7 +167,7 @@ int build_poll_array(struct pollfd *pfds, int listen_fd) {
             pfds[server_idx].events |= POLLIN;
         }
 
-        if (sessions[i].client_to_server.head < sessions[i].client_to_server.tail) {
+        if (sessions[i].client_to_server.head < sessions[i].client_to_server.tail && !sessions[i].shut_wr_server) {
             pfds[server_idx].events |= POLLOUT;
         }
     }
@@ -194,6 +207,9 @@ void handle_new_connection(int listen_fd) {
         return;
     }
 
+    set_nonblock(new_client_fd);
+    set_nonblock(new_server_fd);
+
     sessions[free_idx].active = 1;
     sessions[free_idx].fd_client = new_client_fd;
     sessions[free_idx].fd_server = new_server_fd;
@@ -201,6 +217,8 @@ void handle_new_connection(int listen_fd) {
     sessions[free_idx].server_to_client.head = sessions[free_idx].server_to_client.tail = 0;
     sessions[free_idx].eof_client = 0;
     sessions[free_idx].eof_server = 0;
+    sessions[free_idx].shut_wr_client = 0;
+    sessions[free_idx].shut_wr_server = 0;
 }
 
 void handle_session_io(Session *s, struct pollfd *pfds) {
@@ -208,8 +226,8 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
     int server_idx = s->pfd_server_idx;
     int err = 0;
 
-    if ((pfds[client_idx].revents & POLLERR) || 
-        (pfds[server_idx].revents & POLLERR)) {
+    if ((pfds[client_idx].revents & (POLLERR | POLLNVAL)) || 
+        (pfds[server_idx].revents & (POLLERR | POLLNVAL))) {
         close_session(s);
         return;
     }
@@ -217,7 +235,10 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
     if (!s->eof_client && (pfds[client_idx].revents & POLLIN)) {
         int num = recv(s->fd_client, s->client_to_server.data + s->client_to_server.tail, BUF_SIZE - s->client_to_server.tail, 0);
         if (num < 0) {
-            err = 1;
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                perror("recv client error");
+                err = 1;
+            }
         } else if (num == 0) {
             s->eof_client = 1;
         } else {
@@ -228,7 +249,10 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
     if (!s->eof_server && !err && (pfds[server_idx].revents & POLLIN)) {
         int num = recv(s->fd_server, s->server_to_client.data + s->server_to_client.tail, BUF_SIZE - s->server_to_client.tail, 0);
         if (num < 0) {
-            err = 1;
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                perror("recv server error");
+                err = 1;
+            }
         } else if (num == 0) {
             s->eof_server = 1;
         } else {
@@ -241,7 +265,10 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         if (len > 0) {
             int n = send(s->fd_client, s->server_to_client.data + s->server_to_client.head, len, 0);
             if (n < 0) {
-                err = 1;
+                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                    perror("send client error");
+                    err = 1;
+                }
             } else {
                 s->server_to_client.head += n;
             }
@@ -253,7 +280,10 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         if (len > 0) {
             int n = send(s->fd_server, s->client_to_server.data + s->client_to_server.head, len, 0);
             if (n < 0) {
-                err = 1;
+                if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                    perror("send server error");
+                    err = 1;
+                }
             }
             else {
                 s->client_to_server.head += n;
@@ -261,10 +291,17 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         }
     }
 
-    int client_done = s->eof_client && (s->client_to_server.head == s->client_to_server.tail);
-    int server_done = s->eof_server && (s->server_to_client.head == s->server_to_client.tail);
+    if (!err && s->eof_client && s->client_to_server.head == s->client_to_server.tail && !s->shut_wr_server) {
+        shutdown(s->fd_server, SHUT_WR);
+        s->shut_wr_server = 1;
+    }
 
-    if (err || client_done || server_done) {
+    if (!err && s->eof_server && s->server_to_client.head == s->server_to_client.tail && !s->shut_wr_client) {
+        shutdown(s->fd_client, SHUT_WR);
+        s->shut_wr_client = 1;
+    }
+
+    if (err || (s->shut_wr_client && s->shut_wr_server)) {
         close_session(s);
     }
 }
