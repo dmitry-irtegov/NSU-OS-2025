@@ -19,7 +19,7 @@ int main() {
     pthread_t thread;
     int err = pthread_create(&thread, NULL, print_line, NULL);
     if (err != 0) {
-        fprintf(stderr, "err creating threads: %s\n", strerr(err));
+        fprintf(stderr, "err creating threads: %s\n", strerror(err));
         exit(EXIT_FAILURE);
     }
     sleep(2);
@@ -27,7 +27,7 @@ int main() {
     pthread_cancel(thread);
     err = pthread_join(thread, NULL);
     if (err != 0) {
-        fprintf(stderr, "err joining thread: %s\n", strerr(err));
+        fprintf(stderr, "err joining thread: %s\n", strerror(err));
         exit(EXIT_FAILURE);
     }
     exit(EXIT_SUCCESS);
