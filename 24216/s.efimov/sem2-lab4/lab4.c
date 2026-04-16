@@ -8,14 +8,12 @@ void* print_line(void* arg) {
         fprintf(stderr, "Child!\n");
         sleep(1);
     }
-
-    pthread_exit(NULL);
 }
 
 int main() {
     pthread_t thread;
 
-    if (pthread_create(&thread, NULL, print_line, "Thread 1") != 0) {
+    if (pthread_create(&thread, NULL, print_line, NULL) != 0) {
         perror("Failed to create thread");
         return EXIT_FAILURE;
     }
