@@ -13,17 +13,13 @@ void *child_task(void *arg) {
     pthread_mutex_lock(&m[2]);
     atomic_store(&child_ready, 1);
 
-    for (int i = 1; i <= 10; i++) {
-        int j = i - 1;
-        
-        pthread_mutex_lock(&m[(j + 0) % 3]);
-        
-        fprintf(stderr, "Дочерняя нить: строка %d\n", i);
-        
-        pthread_mutex_unlock(&m[(j + 2) % 3]);
+    for (int i = 0; i < 10; i++) {
+        pthread_mutex_lock(&m[i % 3]); 
+        fprintf(stderr, "Дочерняя нить: строка %d\n", i + 1);
+        pthread_mutex_unlock(&m[(i + 2) % 3]);
     }
     
-    pthread_mutex_unlock(&m[(9 + 0) % 3]);
+    pthread_mutex_unlock(&m[0]); 
 
     return NULL;
 }
@@ -53,15 +49,11 @@ int main(void) {
     while (!atomic_load(&child_ready)) {
         sched_yield(); 
     }
-
-    for (int i = 1; i <= 10; i++) {
-        int j = i - 1;
-        
-        pthread_mutex_lock(&m[(j + 1) % 3]);
-        
-        fprintf(stderr, "Родительская нить: строка %d\n", i);
-        
-        pthread_mutex_unlock(&m[(j + 0) % 3]);
+    
+    for (int i = 0; i < 10; i++) {
+        pthread_mutex_lock(&m[(i + 1) % 3]);
+        fprintf(stderr, "Родительская нить: строка %d\n", i + 1);
+        pthread_mutex_unlock(&m[i % 3]); 
     }
     
     pthread_mutex_unlock(&m[(9 + 1) % 3]);
