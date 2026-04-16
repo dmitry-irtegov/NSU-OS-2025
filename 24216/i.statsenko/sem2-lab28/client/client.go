@@ -49,6 +49,7 @@ func NewClient(address string) (*Client, error) {
 	addr := &unix.SockaddrInet4{Port: port}
 	copy(addr.Addr[:], ips[0].To4())
 	if err := unix.Connect(sk, addr); err != nil {
+		unix.Shutdown(sk, unix.SHUT_RDWR)
 		unix.Close(sk)
 		return nil, err
 	}
@@ -58,6 +59,7 @@ func NewClient(address string) (*Client, error) {
 	}
 	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, data.Hostname())
 	if _, err = unix.Write(sk, []byte(req)); err != nil {
+		unix.Shutdown(sk, unix.SHUT_RDWR)
 		unix.Close(sk)
 		return nil, err
 	}
@@ -65,11 +67,15 @@ func NewClient(address string) (*Client, error) {
 }
 
 func (c *Client) Run() error {
+	defer func() {
+		unix.Shutdown(c.socket, unix.SHUT_RDWR)
+		unix.Close(c.socket)
+	}()
+
 	if err := c.setRawMode(); err != nil {
 		return err
 	}
 	defer c.restoreTerminal()
-	defer unix.Close(c.socket)
 
 	maxFd := c.socket + 1
 	socketOpen := true
