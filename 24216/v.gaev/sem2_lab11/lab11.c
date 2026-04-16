@@ -56,7 +56,7 @@ int main(void) {
         pthread_mutex_unlock(&m[i % 3]); 
     }
     
-    pthread_mutex_unlock(&m[1 % 3]);
+    pthread_mutex_unlock(&m[1]);
 
     pthread_join(thread, NULL);
 
