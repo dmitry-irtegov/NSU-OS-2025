@@ -12,10 +12,9 @@ typedef struct {
 
 void handle_error(int en, const char *msg) {
     if (en != 0) {
-        errno = en;
-        perror(msg);
+        fprintf(stderr, "%s: %s\n", msg, strerror(en));
         exit(EXIT_FAILURE);
-    }
+    }   
 }
 
 void *calc_partial(void *arg) {
