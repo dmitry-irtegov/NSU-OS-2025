@@ -34,8 +34,8 @@ void *sort_worker(void *arg) {
 
 int main(void) {
     thread_arg args[MAX_LINES];
-    pthread_t         tids[MAX_LINES];
-    int               n = 0;
+    pthread_t tids[MAX_LINES];
+    int n = 0;
 
     char line[MAX_LINE_LEN];
     while (n < MAX_LINES && fgets(line, sizeof(line), stdin) != NULL) {
