@@ -8,7 +8,7 @@
 #define CHECK_INTERVAL 1000000
 #define EXTRA_ITERS    50000000
 
-static sig_atomic_t stop_flag = 0;
+sig_atomic_t stop_flag = 0;
 
 typedef struct {
     int idx;
