@@ -154,8 +154,19 @@ void fetch_and_display(int sock, const char* host, const char* path) {
                     }
                     line_len = 0;
                 } else {
-                    if (line_len < (int)sizeof(line_buf) - 1)
-                        line_buf[line_len++] = c;
+                    if (line_len >= (int)sizeof(line_buf) - 1) {
+                        line_buf[line_len] = '\0';
+                        if (is_body) {
+                            printf("%s", line_buf);
+                            line_count++;
+                            if (line_count >= LINES_PER_PAGE) {
+                                pause_for_user();
+                                line_count = 0;
+                            }
+                        }
+                        line_len = 0;
+                    }
+                    line_buf[line_len++] = c;
                 }
             }
         }
