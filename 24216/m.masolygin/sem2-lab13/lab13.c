@@ -48,8 +48,9 @@ void* printer_ten(void* arg) {
         }
         fprintf(stderr, "Child string: %d\n", i + 1);
         turn = 0;
-        cond_signal(&turn_cond);
+
         mutex_unlock(&sync_mutex);
+        cond_signal(&turn_cond);
     }
 
     return NULL;
@@ -87,8 +88,9 @@ int main() {
         }
         fprintf(stderr, "Parent string: %d\n", i + 1);
         turn = 1;
-        cond_signal(&turn_cond);
+
         mutex_unlock(&sync_mutex);
+        cond_signal(&turn_cond);
     }
 
     error = pthread_join(thread, NULL);
