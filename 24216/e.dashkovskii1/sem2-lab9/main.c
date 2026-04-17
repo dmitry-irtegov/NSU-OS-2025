@@ -3,12 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <string.h>
 #include <signal.h>
 
 #define CHECK_INTERVAL 1000000
 #define EXTRA_ITERS    50000000
 
-sig_atomic_t stop_flag = 0;
+int stop_flag = 0;
+pthread_mutex_t stop_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
     int idx;
@@ -27,6 +29,14 @@ void sigint_handler(int sig) {
     stop_flag = 1;
 }
 
+int is_stopped(void) {
+    int v;
+    pthread_mutex_lock(&stop_mutex);
+    v = stop_flag;
+    pthread_mutex_unlock(&stop_mutex);
+    return v;
+}
+
 void *calc_partial(void *arg) {
     thread_arg *targ = (thread_arg *)arg;
     double *partial_sum = (double *)malloc(sizeof(double));
@@ -39,7 +49,7 @@ void *calc_partial(void *arg) {
     long i = targ->idx;
     int step = targ->total_threads;
 
-    while (!stop_flag) {
+    while (!is_stopped()) {
         for (int k = 0; k < CHECK_INTERVAL; k++) {
             *partial_sum += 1.0 / (i * 4.0 + 1.0);
             *partial_sum -= 1.0 / (i * 4.0 + 3.0);
@@ -62,11 +72,13 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    int num_threads = atoi(argv[1]);
-    if (num_threads < 1) {
-        fprintf(stderr, "Number of threads must be >= 1\n");
-        return EXIT_FAILURE;
+    char *endptr;
+    long thread_count = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || thread_count <= 0) {
+        fprintf(stderr, "Number of threads must be a positive integer.\n");
+        exit(EXIT_FAILURE);
     }
+    int num_threads = (int)thread_count;
 
     struct sigaction sa;
     sa.sa_handler = sigint_handler;
