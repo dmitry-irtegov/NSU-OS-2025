@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 #define NUM_STEPS 200000000
 
@@ -42,12 +41,12 @@ int main(int argc, char **argv) {
     }
 
     char *endptr;
-    long parsed = strtol(argv[1], &endptr, 10);
-    if (*argv[1] == '\0' || *endptr != '\0' || parsed < 1 || parsed > INT_MAX) {
-        fprintf(stderr, "Invalid number of threads: '%s'\n", argv[1]);
-        return EXIT_FAILURE;
+    long thread_count = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || thread_count <= 0) {
+        fprintf(stderr, "Number of threads must be a positive integer.\n");
+        exit(EXIT_FAILURE);
     }
-    int num_threads = (int)parsed;
+    int num_threads = (int)thread_count;
 
     pthread_t *threads = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
     thread_arg *args = (thread_arg *)malloc(num_threads * sizeof(thread_arg));
