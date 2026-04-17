@@ -1,7 +1,8 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
+#include <string.h>
+#include <limits.h>
 
 #define NUM_STEPS 200000000
 
@@ -40,11 +41,13 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
-    int num_threads = atoi(argv[1]);
-    if (num_threads < 1) {
-        fprintf(stderr, "Number of threads must be >= 1\n");
+    char *endptr;
+    long parsed = strtol(argv[1], &endptr, 10);
+    if (*argv[1] == '\0' || *endptr != '\0' || parsed < 1 || parsed > INT_MAX) {
+        fprintf(stderr, "Invalid number of threads: '%s'\n", argv[1]);
         return EXIT_FAILURE;
     }
+    int num_threads = (int)parsed;
 
     pthread_t *threads = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
     thread_arg *args = (thread_arg *)malloc(num_threads * sizeof(thread_arg));
