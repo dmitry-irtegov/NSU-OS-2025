@@ -9,7 +9,7 @@
 
 #define MAX_LINES       100
 #define MAX_LINE_LEN    1024
-#define USLEEP_PER_CHAR 10000
+#define USLEEP_PER_CHAR 20000
 
 typedef struct {
     char   buf[MAX_LINE_LEN + 1]; 
