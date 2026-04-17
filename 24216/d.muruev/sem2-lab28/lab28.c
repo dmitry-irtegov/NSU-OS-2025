@@ -111,15 +111,15 @@ int main(int argc, char *argv[]) {
     size_t data_cap = 0;
     size_t data_len = 0;
     size_t out_pos = 0;
-    int headers_done = 0;
+    int headers_done = 0; // нашли ли конец заголовка
     int lines_printed = 0;
     int paused = 0;
-    int sock_eof = 0;
+    int sock_eof = 0; // закрыл ли сервер соединение
 
     int maxfd = (sockfd > STDIN_FILENO ? sockfd : STDIN_FILENO) + 1;
 
     while (1) {
-        if (headers_done && !paused) {
+        if (headers_done && !paused) { // заголовки пропущены и нет паузы
             while (out_pos < data_len) {
                 putchar(data[out_pos]);
                 if (data[out_pos] == '\n') {
@@ -191,10 +191,7 @@ int main(int argc, char *argv[]) {
     free(data);
     restore_mode();
 
-    struct linger sl;
-    sl.l_onoff = 1;
-    sl.l_linger = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+    shutdown(sockfd, SHUT_RDWR);
     close(sockfd);
     return 0;
 }
