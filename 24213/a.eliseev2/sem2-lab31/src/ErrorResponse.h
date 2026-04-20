@@ -5,6 +5,14 @@
 #include <memory>
 
 namespace proxy {
-    std::shared_ptr<MessageBuffer> makeBadRequest(ConnectionManager &mgr);
-    std::shared_ptr<MessageBuffer> makeNoServer(ConnectionManager &mgr);
-}//
+namespace error {
+
+void makeBadRequest(std::shared_ptr<MessageBuffer> &message,
+                    ConnectionManager &connectionManager);
+void makeNoServer(std::shared_ptr<MessageBuffer> &message,
+                  ConnectionManager &connectionManager);
+void makeServerError(std::shared_ptr<MessageBuffer> &message,
+                     ConnectionManager &connectionManager);
+
+} // namespace error
+} // namespace proxy

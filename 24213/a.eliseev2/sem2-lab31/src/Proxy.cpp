@@ -114,7 +114,9 @@ Proxy::makeRequest(const http::RequestLine &line,
     try {
         serverFd = connect(host, port, pending);
     } catch (std::runtime_error &re) {
-        return makeNoServer(*this);
+        std::shared_ptr<MessageBuffer> response;
+        error::makeNoServer(response, *this);
+        return response;
     }
 
     std::shared_ptr<MessageBuffer> response = std::make_shared<MessageBuffer>();

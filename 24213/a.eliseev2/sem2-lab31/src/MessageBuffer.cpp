@@ -1,4 +1,5 @@
 #include "MessageBuffer.h"
+#include <cstring>
 
 namespace proxy {
 
@@ -72,15 +73,25 @@ void MessageBuffer::Writer::write(size_t size) {
     reservedSize = 0;
 }
 
+void MessageBuffer::Writer::write(const char *data, size_t size) {
+    std::memcpy(reserve(size), data, size);
+    write(size);
+}
+
 void MessageBuffer::Writer::removeRange(const char *start, const char *end) {
     std::vector<char> &data = buffer->data;
     char *dataPtr = data.data();
     size_t startIndex = start - dataPtr;
     size_t endIndex = end - dataPtr;
     if (startIndex < buffer->readableSize) {
-        buffer->readableSize -= std::min(buffer->readableSize, endIndex) - startIndex; 
+        buffer->readableSize -=
+            std::min(buffer->readableSize, endIndex) - startIndex;
     }
     data.erase(data.begin() + startIndex, data.begin() + endIndex);
+}
+
+void MessageBuffer::Writer::end() {
+    buffer->isEnd = true;
 }
 
 void MessageBuffer::Writer::commit(MessageNotifier &notifier) {

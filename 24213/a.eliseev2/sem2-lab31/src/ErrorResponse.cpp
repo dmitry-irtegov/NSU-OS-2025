@@ -1,35 +1,58 @@
 #include "ErrorResponse.h"
-#include <cstring>
+#include "MessageBuffer.h"
+#include <memory>
 
 namespace proxy {
+namespace error {
 
 static const char BAD_REQUEST[] =
-    "HTTP/1.0 400 Bad Request\r\n\r\n400 Bad request\r\n";
+    "HTTP/1.0 400 Bad Request\r\n\r\nBad request\r\n";
 static const char NO_SERVER[] =
-    "HTTP/1.0 500 No response from server\r\n\r\n500 No response from server\r\n";
+    "HTTP/1.0 500 Server unavailable\r\n\r\nServer unavailable\r\n";
+static const char SERVER_ERROR[] =
+    "HTTP/1.0 500 Internal server error\r\n\r\nInternal server error\r\n";
 
-std::shared_ptr<MessageBuffer> makeBadRequest(ConnectionManager &mgr) {
-    std::shared_ptr<MessageBuffer> response = std::make_shared<MessageBuffer>();
-    auto respWriter = response->write();
-    respWriter.reserve(sizeof(BAD_REQUEST));
-    std::memcpy(respWriter.reserve(sizeof(BAD_REQUEST)), BAD_REQUEST,
-                sizeof(BAD_REQUEST));
-    respWriter.write(sizeof(BAD_REQUEST) - 1);
-    respWriter.commit(mgr);
-    response->end(mgr);
-    return response;
+void makeBadRequest(std::shared_ptr<MessageBuffer> &message,
+                    ConnectionManager &connectionManager) {
+    if (!message) {
+        message = std::make_shared<MessageBuffer>();
+    }
+    auto writer = message->write();
+    if (writer.actualLength() != 0) {
+        return;
+    }
+    writer.write(BAD_REQUEST, sizeof(BAD_REQUEST) - 1);
+    writer.end();
+    writer.commit(connectionManager);
 }
 
-std::shared_ptr<MessageBuffer> makeNoServer(ConnectionManager &mgr) {
-    std::shared_ptr<MessageBuffer> response = std::make_shared<MessageBuffer>();
-    auto respWriter = response->write();
-    respWriter.reserve(sizeof(NO_SERVER));
-    std::memcpy(respWriter.reserve(sizeof(NO_SERVER)), NO_SERVER,
-                sizeof(NO_SERVER));
-    respWriter.write(sizeof(NO_SERVER) - 1);
-    respWriter.commit(mgr);
-    response->end(mgr);
-    return response;
+void makeNoServer(std::shared_ptr<MessageBuffer> &message,
+                  ConnectionManager &connectionManager) {
+    if (!message) {
+        message = std::make_shared<MessageBuffer>();
+    }
+    auto writer = message->write();
+    if (writer.actualLength() != 0) {
+        return;
+    }
+    writer.write(NO_SERVER, sizeof(NO_SERVER) - 1);
+    writer.end();
+    writer.commit(connectionManager);
 }
 
+void makeServerError(std::shared_ptr<MessageBuffer> &message,
+                     ConnectionManager &connectionManager) {
+    if (!message) {
+        message = std::make_shared<MessageBuffer>();
+    }
+    auto writer = message->write();
+    if (writer.actualLength() != 0) {
+        return;
+    }
+    writer.write(SERVER_ERROR, sizeof(SERVER_ERROR) - 1);
+    writer.end();
+    writer.commit(connectionManager);
+}
+
+} // namespace error
 } // namespace proxy

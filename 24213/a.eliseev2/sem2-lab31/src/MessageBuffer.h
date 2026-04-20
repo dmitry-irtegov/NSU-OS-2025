@@ -41,7 +41,10 @@ class MessageBuffer {
 
         char *reserve(size_t size);
         void write(size_t size);
+        void write(const char *data, size_t size);
         void removeRange(const char *start, const char *end);
+        void end();
+
         void commit(MessageNotifier &notifier);
 
       private:
