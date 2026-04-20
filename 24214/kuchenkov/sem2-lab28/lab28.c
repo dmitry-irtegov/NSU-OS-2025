@@ -67,6 +67,8 @@ void set_terminal(struct termios *orig_termios) {
     }
     new_termios = *orig_termios;
     new_termios.c_lflag &= ~(ICANON | ECHO);
+    new_termios.c_cc[VMIN] = 1;
+    new_termios.c_cc[VTIME] = 0;
     if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) != 0) {
         perror("tcsetattr");
         exit(EXIT_FAILURE);
