@@ -15,7 +15,7 @@ constexpr size_t READ_BUF_SIZE = 1024;
 
 ClientConnection::ClientConnection(int socketFd)
     : socketFd(socketFd), request(std::make_shared<MessageBuffer>()),
-      responseReadPos(0) {
+      responseReadPos(0), requestLine(std::nullopt), requestParsePos(0) {
 }
 
 ClientConnection::~ClientConnection() {
@@ -24,62 +24,104 @@ ClientConnection::~ClientConnection() {
     }
 }
 
-bool ClientConnection::serviceRead(ResponseCache &cache,
-                                   ConnectionManager &connectionManager) {
-    MessageBuffer::Writer writer = request->write();
-    ssize_t count =
-        ::read(socketFd, writer.reserve(READ_BUF_SIZE), READ_BUF_SIZE);
-    if (count < 0) {
-        throw std::system_error(errno, std::generic_category(), "Read error");
-    }
-    if (count > 0) {
-        writer.write(count);
-    } else {
-        writer.end();
-        writer.commit(connectionManager);
-        return true;
-    }
+bool ClientConnection::parseRequest(MessageBuffer::Writer &writer) {
+    if (!requestLine) {
+        http::RequestLine requestLine;
+        http::RequestLine::ParseInfo parseInfo;
 
-    if (response) {
-        writer.commit(connectionManager);
-        return false;
-    }
-
-    // We've not made a request yet.
-    // Try to parse the request line and make the request.
-    http::RequestLine requestLine;
-    const char *ptr = writer.data();
-    http::RequestLine::ParseInfo parseInfo;
-
-    try {
-        if (!http::RequestLine::parse(&ptr, ptr + writer.actualLength(),
-                                      requestLine, parseInfo)) {
+        const char *start = writer.data().data();
+        const char *ptr = start + requestParsePos;
+        size_t size = writer.data().size() - requestParsePos;
+        if (!http::RequestLine::parse(&ptr, ptr + size, requestLine,
+                                      parseInfo)) {
             return false;
         }
-    } catch (std::runtime_error &re) {
-        std::cerr << "Bad request" << std::endl;
-        error::makeBadRequest(response, connectionManager);
-        return false;
+        requestParsePos = ptr - start;
+
+        std::cerr << "Request: "
+                  << std::string(parseInfo.methodStart, parseInfo.versionEnd)
+                  << std::endl;
+
+        char *httpVersion = const_cast<char *>(parseInfo.versionStart);
+        std::memcpy(httpVersion, "HTTP/1.0", 8);
+
+        writer.removeRange(parseInfo.uri.start - start,
+                           parseInfo.uri.hostSize());
+        requestParsePos -= parseInfo.uri.hostSize();
+
+        this->requestLine = requestLine;
     }
+    while (true) {
+        http::Header header;
+        http::Header::ParseInfo parseInfo;
 
-    std::cerr << "Request: "
-              << std::string(parseInfo.methodStart, parseInfo.versionEnd)
-              << std::endl;
+        const char *start = writer.data().data();
+        const char *ptr = start + requestParsePos;
+        size_t size = writer.data().size() - requestParsePos;
+        if (!http::Header::parse(&ptr, ptr + size, header, parseInfo)) {
+            return false;
+        }
+        requestParsePos = ptr - start;
 
-    char *httpVersion = const_cast<char *>(parseInfo.versionStart);
-    std::memcpy(httpVersion, "HTTP/1.0", 8);
-    writer.removeRange(parseInfo.uri.start, parseInfo.uri.pathStart);
+        if (parseInfo.isEndOfHeaders) {
+            constexpr char connCloseHeader[] = "Connection: close\r\n";
+            writer.insertRange(connCloseHeader, sizeof(connCloseHeader) - 1,
+                               parseInfo.nameStart - start);
+            return true;
+        }
+        if (header.nameEquals("connection")) {
+            writer.removeRange(parseInfo.nameStart - start, parseInfo.size());
+            requestParsePos -= parseInfo.size();
+        }
+    }
+}
 
-    writer.commit(connectionManager);
-    if (requestLine.method == http::RequestMethod::Get) {
-        response = cache.getEntry(requestLine.uri);
+bool ClientConnection::serviceRead(ResponseCache &cache,
+                                   ConnectionManager &connectionManager) {
+    {
+        MessageBuffer::Writer writer = request->write();
+        ssize_t count =
+            ::read(socketFd, writer.reserve(READ_BUF_SIZE), READ_BUF_SIZE);
+        if (count < 0) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "Read error");
+        }
+        if (count > 0) {
+            writer.written(count);
+        } else {
+            writer.end();
+            writer.commit(connectionManager);
+            return true;
+        }
+
+        if (response) {
+            writer.commit(connectionManager);
+            return false;
+        }
+
+        // We've not made a request yet.
+        // Try to parse the request line and make the request.
+        try {
+            if (!parseRequest(writer)) {
+                return false;
+            }
+        } catch (std::runtime_error &re) {
+            std::cerr << "Bad request: " << re.what() << std::endl;
+            error::makeBadRequest(response, connectionManager);
+            return false;
+        }
+
+        writer.commit(connectionManager);
+    }
+    if (requestLine->method == http::RequestMethod::Get) {
+        response = cache.getEntry(requestLine->uri);
     }
     if (response) {
         std::cerr << "Sending cached response." << std::endl;
     } else {
         std::cerr << "Forwarding to server." << std::endl;
-        response =
-            connectionManager.makeRequest(requestLine, request, socketFd);
+        response = connectionManager.makeRequest(requestLine.value(), request,
+                                                 socketFd);
     }
     response->subscribe(socketFd);
 
@@ -158,7 +200,7 @@ bool ServerConnection::serviceRead(ResponseCache &cache,
         throw std::system_error(errno, std::generic_category(), "Read error");
     }
     if (count > 0) {
-        writer.write(count);
+        writer.written(count);
     } else {
         writer.end();
         writer.commit(connectionManager);
@@ -174,9 +216,9 @@ bool ServerConnection::serviceRead(ResponseCache &cache,
     // the response. Try to parse it.
     http::StatusLine line;
     http::StatusLine::ParseInfo parseInfo;
-    const char *ptr = writer.data();
+    const char *ptr = writer.data().data();
 
-    if (http::StatusLine::parse(&ptr, ptr + writer.actualLength(), line,
+    if (http::StatusLine::parse(&ptr, ptr + writer.data().size(), line,
                                 parseInfo)) {
         std::cerr << "Response: "
                   << std::string(parseInfo.versionStart, parseInfo.reasonEnd)

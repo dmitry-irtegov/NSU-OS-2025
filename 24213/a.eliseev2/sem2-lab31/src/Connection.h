@@ -4,6 +4,7 @@
 #include "MessageBuffer.h"
 #include "ResponseCache.h"
 #include <memory>
+#include <optional>
 #include <poll.h>
 #include <string>
 
@@ -68,10 +69,15 @@ class ClientConnection final : public Connection {
     bool serviceRead(ResponseCache &cache,
                      ConnectionManager &connectionManager);
 
+    bool parseRequest(MessageBuffer::Writer &writer);
+
     const int socketFd;
     std::shared_ptr<MessageBuffer> request;
     std::shared_ptr<MessageBuffer> response;
     size_t responseReadPos;
+
+    std::optional<http::RequestLine> requestLine;
+    size_t requestParsePos;
 };
 
 class ServerConnection final : public Connection {

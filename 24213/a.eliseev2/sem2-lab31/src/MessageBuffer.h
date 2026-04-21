@@ -36,13 +36,14 @@ class MessageBuffer {
         Writer(const Writer &) = delete;
         Writer &operator=(const Writer &) = delete;
 
-        char *data();
-        size_t actualLength();
+        std::vector<char> &data();
 
         char *reserve(size_t size);
-        void write(size_t size);
-        void write(const char *data, size_t size);
-        void removeRange(const char *start, const char *end);
+        void written(size_t size);
+
+        void appendRange(const char *data, size_t size);
+        void insertRange(const char *data, size_t size, size_t at);
+        void removeRange(size_t at, size_t size);
         void end();
 
         void commit(MessageNotifier &notifier);
