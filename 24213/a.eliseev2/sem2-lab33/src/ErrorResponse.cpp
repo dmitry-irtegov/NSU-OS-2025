@@ -18,10 +18,10 @@ void makeBadRequest(std::shared_ptr<MessageBuffer> &message,
         message = std::make_shared<MessageBuffer>();
     }
     auto writer = message->write();
-    if (writer.actualLength() != 0) {
+    if (writer.data().size() != 0) {
         return;
     }
-    writer.write(BAD_REQUEST, sizeof(BAD_REQUEST) - 1);
+    writer.appendRange(BAD_REQUEST, sizeof(BAD_REQUEST) - 1);
     writer.end();
     writer.commit(connectionManager);
 }
@@ -32,10 +32,10 @@ void makeNoServer(std::shared_ptr<MessageBuffer> &message,
         message = std::make_shared<MessageBuffer>();
     }
     auto writer = message->write();
-    if (writer.actualLength() != 0) {
+    if (writer.data().size() != 0) {
         return;
     }
-    writer.write(NO_SERVER, sizeof(NO_SERVER) - 1);
+    writer.appendRange(NO_SERVER, sizeof(NO_SERVER) - 1);
     writer.end();
     writer.commit(connectionManager);
 }
@@ -46,10 +46,10 @@ void makeServerError(std::shared_ptr<MessageBuffer> &message,
         message = std::make_shared<MessageBuffer>();
     }
     auto writer = message->write();
-    if (writer.actualLength() != 0) {
+    if (writer.data().size() != 0) {
         return;
     }
-    writer.write(SERVER_ERROR, sizeof(SERVER_ERROR) - 1);
+    writer.appendRange(SERVER_ERROR, sizeof(SERVER_ERROR) - 1);
     writer.end();
     writer.commit(connectionManager);
 }

@@ -11,11 +11,10 @@ static bool partialHasPrefix(const char *str1, const char *str2,
     return std::strncmp(str1, str2, std::min(minLen, length)) == 0;
 }
 
-static bool findSpace(const char **ptr, const char *end,
-                      const char *spaces = " \n\r") {
+static bool findChar(const char **ptr, const char *end, const char *chars) {
     while (*ptr < end) {
         char ch = **ptr;
-        if (std::strchr(spaces, ch)) {
+        if (std::strchr(chars, ch)) {
             break;
         }
         if (!std::isspace(ch) && !std::isgraph(ch)) {
@@ -30,12 +29,14 @@ static bool findSpace(const char **ptr, const char *end,
     return true;
 }
 
-static bool readSpace(const char **ptr, const char *end) {
+static bool readChar(const char **ptr, const char *end, const char *chars) {
     if (*ptr == end) {
         return false;
     }
-    if (**ptr != ' ') {
-        throw std::runtime_error("Invalid separator in request/response line");
+    char ch = **ptr;
+    if (!std::strchr(chars, ch)) {
+        throw std::runtime_error("Invalid character. Expected: " +
+                                 std::string(chars));
     }
     (*ptr)++;
     return true;
@@ -50,22 +51,23 @@ static bool readEol(const char **ptr, const char *end) {
         return true;
     }
     if (**ptr != '\r') {
-        throw std::runtime_error("Invalid request/response line terminator");
+        throw std::runtime_error("Invalid line terminator. CR expected.");
     }
     (*ptr)++;
     if (*ptr == end) {
         return false;
     }
     if (**ptr != '\n') {
-        throw std::runtime_error("Invalid request/response line terminator");
+        throw std::runtime_error("Invalid line terminator. LF expected.");
     }
     (*ptr)++;
     return true;
 }
 
-static bool parseWord(const char **data, const char *end, std::string &word) {
+static bool parseWord(const char **data, const char *end, std::string &word,
+                      const char *separators = " \n\r") {
     const char *start = *data;
-    if (!findSpace(data, end)) {
+    if (!findChar(data, end, separators)) {
         return false;
     }
     word = std::string(start, *data);
@@ -124,7 +126,8 @@ static bool parseAbsolute(const char **data, const char *end, Uri &uri) {
     return true;
 }
 
-bool Uri::parse(const char **data, const char *end, Uri &uri, ParseInfo &parseInfo) {
+bool Uri::parse(const char **data, const char *end, Uri &uri,
+                ParseInfo &parseInfo) {
     if (*data == end) {
         return false;
     }
@@ -137,7 +140,7 @@ bool Uri::parse(const char **data, const char *end, Uri &uri, ParseInfo &parseIn
         return false;
     }
     parseInfo.pathStart = *data;
-    if (!findSpace(data, end)) {
+    if (!findChar(data, end, " \n\r")) {
         return false;
     }
     parseInfo.pathEnd = *data;
@@ -158,7 +161,7 @@ static bool parseMethod(const char **data, const char *end,
     } else if (strMethod == "HEAD") {
         method = RequestMethod::Head;
     } else {
-        throw std::runtime_error("Invalid request method");
+        throw std::runtime_error("Invalid request method: " + strMethod);
     }
     return true;
 }
@@ -179,19 +182,20 @@ static bool parseVersion(const char **data, const char *end, Version &version) {
     return true;
 }
 
-bool RequestLine::parse(const char **data, const char *end, RequestLine &line, ParseInfo &parseInfo) {
+bool RequestLine::parse(const char **data, const char *end, RequestLine &line,
+                        ParseInfo &parseInfo) {
     parseInfo.methodStart = *data;
     if (!parseMethod(data, end, line.method)) {
         return false;
     }
     parseInfo.methodEnd = *data;
-    if (!readSpace(data, end)) {
+    if (!readChar(data, end, " ")) {
         return false;
     }
     if (!Uri::parse(data, end, line.uri, parseInfo.uri)) {
         return false;
     }
-    if (!readSpace(data, end)) {
+    if (!readChar(data, end, " ")) {
         return false;
     }
     parseInfo.versionStart = *data;
@@ -202,6 +206,7 @@ bool RequestLine::parse(const char **data, const char *end, RequestLine &line, P
     if (!readEol(data, end)) {
         return false;
     }
+    parseInfo.end = *data;
     return true;
 }
 
@@ -219,31 +224,82 @@ static bool parseResponseCode(const char **data, const char *end,
     return true;
 }
 
-bool StatusLine::parse(const char **data, const char *end, StatusLine &line, ParseInfo &ParseInfo) {
-    ParseInfo.versionStart = *data;
+bool StatusLine::parse(const char **data, const char *end, StatusLine &line,
+                       ParseInfo &info) {
+    info.versionStart = *data;
     if (!parseVersion(data, end, line.version)) {
         return false;
     }
-    ParseInfo.versionEnd = *data;
-    if (!readSpace(data, end)) {
+    info.versionEnd = *data;
+    if (!readChar(data, end, " ")) {
         return false;
     }
-    ParseInfo.codeStart = *data;
+    info.codeStart = *data;
     if (!parseResponseCode(data, end, line.code)) {
         return false;
     }
-    ParseInfo.codeEnd = *data;
-    if (!readSpace(data, end)) {
+    info.codeEnd = *data;
+    if (!readChar(data, end, " ")) {
         return false;
     }
-    ParseInfo.reasonStart = *data;
-    if (!findSpace(data, end, "\r\n")) {
+    info.reasonStart = *data;
+    if (!findChar(data, end, "\r\n")) {
         return false;
     }
-    ParseInfo.reasonEnd = *data;
+    info.reasonEnd = *data;
     if (!readEol(data, end)) {
         return false;
     }
+    info.end = *data;
+    return true;
+}
+
+bool Header::parse(const char **data, const char *end, Header &header,
+                   ParseInfo &info) {
+    if (*data == end) {
+        return false;
+    }
+    if (**data == '\r' || **data == '\n') {
+        info.nameStart = *data;
+        if (!readEol(data, end)) {
+            return false;
+        }
+        info.isEndOfHeaders = true;
+        return true;
+    }
+
+    info.isEndOfHeaders = false;
+    info.nameStart = *data;
+    if (!parseWord(data, end, header.name, ":")) {
+        return false;
+    }
+    info.nameEnd = *data;
+    if (!readChar(data, end, ":")) {
+        return false;
+    }
+    if (!readChar(data, end, " ")) {
+        return false;
+    }
+    info.valueStart = *data;
+    while (true) {
+        if (!findChar(data, end, "\r\n")) {
+            return false;
+        }
+        info.valueEnd = *data;
+        if (!readEol(data, end)) {
+            return false;
+        }
+        if (*data == end) {
+            return false;
+        }
+        if (**data != ' ' && **data != '\t') {
+            break;
+        }
+        (*data)++;
+    }
+    header.name = std::string(info.nameStart, info.nameEnd);
+    header.value = std::string(info.valueStart, info.valueEnd);
+    info.end = *data;
     return true;
 }
 

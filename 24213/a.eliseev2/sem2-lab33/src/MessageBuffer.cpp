@@ -1,27 +1,12 @@
 #include "MessageBuffer.h"
+#include <cassert>
 #include <cstring>
 #include <pthread.h>
-#include <system_error>
 
 namespace proxy {
 
-MessageBuffer::MessageBuffer() : data(), isEnd(false), readableSize(0) {
-    pthread_mutexattr_t attr;
-    if (int error = pthread_mutexattr_init(&attr)) {
-        throw std::system_error(error, std::generic_category(),
-                                "Could not init mutexattr");
-    }
-    if (int error = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE)) {
-        pthread_mutexattr_destroy(&attr);
-        throw std::system_error(error, std::generic_category(),
-                                "Could not set mutex type");
-    }
-    if (int error = pthread_mutex_init(&lock, &attr)) {
-        pthread_mutexattr_destroy(&attr);
-        throw std::system_error(error, std::generic_category(),
-                                "Could not init mutex");
-    }
-    pthread_mutexattr_destroy(&attr);
+MessageBuffer::MessageBuffer()
+    : data(), isEnd(false), readableSize(0), lock(PTHREAD_MUTEX_INITIALIZER) {
 }
 
 MessageBuffer::~MessageBuffer() {
@@ -91,12 +76,8 @@ MessageBuffer::Writer::~Writer() {
     pthread_mutex_unlock(&buffer->lock);
 }
 
-char *MessageBuffer::Writer::data() {
-    return buffer->data.data();
-}
-
-size_t MessageBuffer::Writer::actualLength() {
-    return buffer->data.size();
+std::vector<char> &MessageBuffer::Writer::data() {
+    return buffer->data;
 }
 
 char *MessageBuffer::Writer::reserve(size_t size) {
@@ -106,26 +87,30 @@ char *MessageBuffer::Writer::reserve(size_t size) {
     return buffer->data.data() + oldSize;
 }
 
-void MessageBuffer::Writer::write(size_t size) {
+void MessageBuffer::Writer::written(size_t size) {
     buffer->data.resize(buffer->data.size() - reservedSize + size);
     reservedSize = 0;
 }
 
-void MessageBuffer::Writer::write(const char *data, size_t size) {
-    std::memcpy(reserve(size), data, size);
-    write(size);
+void MessageBuffer::Writer::appendRange(const char *data, size_t size) {
+    assert(reservedSize == 0 && "Write already in progress");
+    std::vector<char> &bufData = buffer->data;
+    bufData.reserve(bufData.size() + size);
+    bufData.insert(bufData.end(), data, data + size);
 }
 
-void MessageBuffer::Writer::removeRange(const char *start, const char *end) {
+void MessageBuffer::Writer::insertRange(const char *data, size_t size,
+                                        size_t at) {
+    assert(reservedSize == 0 && "Write already in progress");
+    std::vector<char> &bufData = buffer->data;
+    bufData.reserve(bufData.size() + size);
+    bufData.insert(bufData.begin() + at, data, data + size);
+}
+
+void MessageBuffer::Writer::removeRange(size_t at, size_t size) {
+    assert(reservedSize == 0 && "Write already in progress");
     std::vector<char> &data = buffer->data;
-    char *dataPtr = data.data();
-    size_t startIndex = start - dataPtr;
-    size_t endIndex = end - dataPtr;
-    if (startIndex < buffer->readableSize) {
-        buffer->readableSize -=
-            std::min(buffer->readableSize, endIndex) - startIndex;
-    }
-    data.erase(data.begin() + startIndex, data.begin() + endIndex);
+    data.erase(data.begin() + at, data.begin() + at + size);
 }
 
 void MessageBuffer::Writer::end() {
