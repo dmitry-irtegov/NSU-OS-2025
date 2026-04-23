@@ -43,6 +43,7 @@ func (s *fdSet) setMax(fd int, maxFd *int) {
 
 type proxyConn struct {
 	clientFd   int
+	clientConn *net.TCPConn
 	originFd   int
 	state      connState
 	reqBuf     []byte
@@ -55,10 +56,10 @@ type proxyConn struct {
 }
 
 func (c *proxyConn) close() {
-	if c.clientFd >= 0 {
-		unix.Shutdown(c.clientFd, unix.SHUT_RDWR)
-		unix.Close(c.clientFd)
+	if c.clientConn != nil {
+		c.clientConn.Close()
 		c.clientFd = -1
+		c.clientConn = nil
 	}
 	if c.originFd >= 0 {
 		unix.Shutdown(c.originFd, unix.SHUT_RDWR)
@@ -77,41 +78,38 @@ func (c *proxyConn) headerEnd() int {
 }
 
 type Proxy struct {
+	ln       *net.TCPListener
 	listenFd int
 	cache    *Cache
 	conns    map[int]*proxyConn
 }
 
 func NewProxy(port int) (*Proxy, error) {
-	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	ln, err := net.Listen("tcp4", fmt.Sprintf(":%d", port))
 	if err != nil {
 		return nil, err
 	}
-	if err := unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
-		unix.Close(fd)
+	tcpLn := ln.(*net.TCPListener)
+	raw, err := tcpLn.SyscallConn()
+	if err != nil {
+		tcpLn.Close()
 		return nil, err
 	}
-	addr := &unix.SockaddrInet4{Port: port}
-	if err := unix.Bind(fd, addr); err != nil {
-		unix.Close(fd)
-		return nil, err
-	}
-	if err := unix.Listen(fd, 128); err != nil {
-		unix.Close(fd)
+	var listenFd int
+	if err := raw.Control(func(fd uintptr) { listenFd = int(fd) }); err != nil {
+		tcpLn.Close()
 		return nil, err
 	}
 	return &Proxy{
-		listenFd: fd,
+		ln:       tcpLn,
+		listenFd: listenFd,
 		cache:    NewCache(),
 		conns:    make(map[int]*proxyConn),
 	}, nil
 }
 
 func (p *Proxy) Run() error {
-	defer func() {
-		unix.Shutdown(p.listenFd, unix.SHUT_RDWR)
-		unix.Close(p.listenFd)
-	}()
+	defer p.ln.Close()
 
 	for {
 		var rset, wset fdSet
@@ -162,11 +160,18 @@ func (p *Proxy) Run() error {
 }
 
 func (p *Proxy) accept() {
-	fd, _, err := unix.Accept(p.listenFd)
+	conn, err := p.ln.AcceptTCP()
 	if err != nil {
 		return
 	}
-	p.conns[fd] = &proxyConn{clientFd: fd, originFd: -1, state: stateReading}
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		conn.Close()
+		return
+	}
+	var fd int
+	raw.Control(func(f uintptr) { fd = int(f) })
+	p.conns[fd] = &proxyConn{clientFd: fd, clientConn: conn, originFd: -1, state: stateReading}
 }
 
 func (p *Proxy) handle(c *proxyConn, rset, wset *fdSet) bool {
@@ -197,6 +202,9 @@ func (p *Proxy) handleReading(c *proxyConn, rset *fdSet) bool {
 				return true
 			}
 		}
+	}
+	if err == unix.EAGAIN {
+		return false
 	}
 	if err != nil || n == 0 {
 		c.close()
@@ -243,7 +251,7 @@ func (p *Proxy) handleForwarding(c *proxyConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.sendOff += n
 		}
-		if err != nil {
+		if err != nil && err != unix.EAGAIN {
 			c.close()
 			return true
 		}
@@ -267,7 +275,11 @@ func (p *Proxy) handleSending(c *proxyConn, wset *fdSet) bool {
 	if n > 0 {
 		c.sendOff += n
 	}
-	if err != nil || c.sendOff >= len(c.respBuf) {
+	if err != nil && err != unix.EAGAIN {
+		c.close()
+		return true
+	}
+	if c.sendOff >= len(c.respBuf) {
 		c.close()
 		return true
 	}
