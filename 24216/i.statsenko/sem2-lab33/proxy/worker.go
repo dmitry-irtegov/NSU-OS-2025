@@ -44,6 +44,7 @@ func (s *fdSet) setMax(fd int, maxFd *int) {
 
 type workerConn struct {
 	clientFd   int
+	clientConn *net.TCPConn
 	originFd   int
 	state      connState
 	reqBuf     []byte
@@ -56,10 +57,10 @@ type workerConn struct {
 }
 
 func (c *workerConn) close() {
-	if c.clientFd >= 0 {
-		unix.Shutdown(c.clientFd, unix.SHUT_RDWR)
-		unix.Close(c.clientFd)
+	if c.clientConn != nil {
+		c.clientConn.Close()
 		c.clientFd = -1
+		c.clientConn = nil
 	}
 	if c.originFd >= 0 {
 		unix.Shutdown(c.originFd, unix.SHUT_RDWR)
@@ -99,8 +100,15 @@ func newWorker(cache *Cache) (*Worker, error) {
 	}, nil
 }
 
-func (w *Worker) assign(clientFd int) {
-	c := &workerConn{clientFd: clientFd, originFd: -1, state: stateReading}
+func (w *Worker) assign(conn *net.TCPConn) {
+	raw, err := conn.SyscallConn()
+	if err != nil {
+		conn.Close()
+		return
+	}
+	var fd int
+	raw.Control(func(f uintptr) { fd = int(f) })
+	c := &workerConn{clientFd: fd, clientConn: conn, originFd: -1, state: stateReading}
 	w.mu.Lock()
 	w.queue = append(w.queue, c)
 	w.mu.Unlock()
@@ -192,6 +200,9 @@ func (w *Worker) handleReading(c *workerConn, rset *fdSet) bool {
 			}
 		}
 	}
+	if err == unix.EAGAIN {
+		return false
+	}
 	if err != nil || n == 0 {
 		c.close()
 		return true
@@ -237,7 +248,7 @@ func (w *Worker) handleForwarding(c *workerConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.sendOff += n
 		}
-		if err != nil {
+		if err != nil && err != unix.EAGAIN {
 			c.close()
 			return true
 		}
@@ -261,7 +272,11 @@ func (w *Worker) handleSending(c *workerConn, wset *fdSet) bool {
 	if n > 0 {
 		c.sendOff += n
 	}
-	if err != nil || c.sendOff >= len(c.respBuf) {
+	if err != nil && err != unix.EAGAIN {
+		c.close()
+		return true
+	}
+	if c.sendOff >= len(c.respBuf) {
 		c.close()
 		return true
 	}
