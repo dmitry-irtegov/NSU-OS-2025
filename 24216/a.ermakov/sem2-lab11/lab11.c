@@ -1,72 +1,89 @@
-#include <stdio.h>
 #include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-#define NUM_LINES 10
+pthread_mutex_t mx_first;
+pthread_mutex_t mx_second;
+pthread_mutex_t mx_third;
 
-pthread_mutex_t mutex;
-pthread_cond_t parent_cond;
-pthread_cond_t child_cond;
-int turn = 0;
+atomic_int child_is_ready = 0;
 
-void* thread_routine(void* arg) {
-    (void) arg;
-
-    for (int i = 0; i < NUM_LINES; i++) {
-        pthread_mutex_lock(&mutex);
-        while (turn != 1) {
-            pthread_cond_wait(&child_cond, &mutex);
-        }
-        
-        fprintf(stderr, "Дочерняя нить: строка %d\n", i + 1);
-        turn = 0;
-        pthread_cond_signal(&parent_cond);
-        
-        pthread_mutex_unlock(&mutex);
+pthread_mutex_t* mutex_by_slot(int slot) {
+    switch (slot % 3) {
+        case 0:
+            return &mx_first;
+        case 1:
+            return &mx_second;
+        default:
+            return &mx_third;
     }
-    
-    return NULL;
+}
+
+void print_sequence(const char* title, int lock_shift, int unlock_shift) {
+    for (int line = 1; line <= 10; line++) {
+        int step = line - 1;
+        pthread_mutex_lock(mutex_by_slot(step + lock_shift));
+
+        fprintf(stderr, "%s %d\n", title, line);
+
+        pthread_mutex_unlock(mutex_by_slot(step + unlock_shift));
+    }
+
+    pthread_mutex_unlock(mutex_by_slot(9 + lock_shift));
+}
+
+void* child_worker(void* arg) {
+    pthread_mutex_lock(&mx_third);
+
+    atomic_store(&child_is_ready, 1);
+
+    print_sequence((const char*)arg, 0, 2);
+
+    pthread_exit(NULL);
 }
 
 int main() {
-    pthread_t thr;
-    int status;
-    
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
-    
-    pthread_mutex_init(&mutex, &attr);
-    pthread_cond_init(&parent_cond, NULL);
-    pthread_cond_init(&child_cond, NULL);
-    pthread_mutexattr_destroy(&attr);
 
-    turn = 0;
-
-    status = pthread_create(&thr, NULL, thread_routine, NULL);
-    if (status != 0) {
-        fprintf(stderr, "Ошибка создания потока: %s\n", strerror(status));
+    if (pthread_mutex_init(&mx_first, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации первого мьютекса\n");
+        return 1;
+    }
+    if (pthread_mutex_init(&mx_second, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации второго мьютекса\n");
+        return 1;
+    }
+    if (pthread_mutex_init(&mx_third, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации третьего мьютекса\n");
         return 1;
     }
 
-    for (int i = 0; i < NUM_LINES; i++) {
-        pthread_mutex_lock(&mutex);
-        while (turn != 0) {
-            pthread_cond_wait(&parent_cond, &mutex);
-        }
-        
-        fprintf(stderr, "Родительская нить: строка %d\n", i + 1);
-        turn = 1;
-        pthread_cond_signal(&child_cond);
-        
-        pthread_mutex_unlock(&mutex);
+    pthread_mutexattr_destroy(&attr);
+    pthread_mutex_lock(&mx_first);
+
+    pthread_t thread;
+    int error = pthread_create(&thread, NULL, child_worker, "Дочерняя нить:");
+    if (error != 0) {
+        fprintf(stderr, "Ошибка создания потока: %s\n", strerror(error));
+        return 1;
     }
 
-    pthread_join(thr, NULL);
-    
-    pthread_mutex_destroy(&mutex);
-    pthread_cond_destroy(&parent_cond);
-    pthread_cond_destroy(&child_cond);
+    while (!atomic_load(&child_is_ready)) {
+        sched_yield();
+    }
+
+    print_sequence("Родительская нить:", 1, 0);
+
+    pthread_join(thread, NULL);
+
+    pthread_mutex_destroy(&mx_first);
+    pthread_mutex_destroy(&mx_second);
+    pthread_mutex_destroy(&mx_third);
 
     return 0;
 }
