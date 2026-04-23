@@ -172,10 +172,10 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    struct linger sl;
-    sl.l_onoff = 1;
-    sl.l_linger = 0;
-    setsockopt(sockfd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+    if (shutdown(sockfd, SHUT_RDWR) != 0) {
+        perror("shutdown");
+        return 1;
+    }
     close(sockfd);
 
     printf("\n"); 
