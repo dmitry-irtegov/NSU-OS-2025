@@ -7,9 +7,8 @@
 
 #define ITERATIONS 10
 #define MUTEX_COUNT 3
-#define MUTEX_COMMON 0
-#define MUTEX_PARENT 1
-#define MUTEX_CHILD 2
+#define MUTEX_PARENT_START 0
+#define MUTEX_CHILD_START 2
 
 pthread_mutex_t mutex[MUTEX_COUNT];
 
@@ -21,20 +20,18 @@ void check_error(int errnum, const char *context) {
 }
 
 void *thread_function(void *arg) {
-    check_error(pthread_mutex_lock(&mutex[MUTEX_CHILD]), "child: mutex_child lock error");
+    check_error(pthread_mutex_lock(&mutex[MUTEX_CHILD_START]), "child: initial mutex lock error");
 
     for (int i = 0; i < ITERATIONS; i++) {
-        check_error(pthread_mutex_lock(&mutex[MUTEX_PARENT]), "child: mutex_parent lock error");
-        printf("child %d\n", i + 1);
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_CHILD]), "child: mutex_child unlock error");
+        int lock_idx = i % MUTEX_COUNT;
+        int unlock_idx = (i + MUTEX_COUNT - 1) % MUTEX_COUNT;
 
-        check_error(pthread_mutex_lock(&mutex[MUTEX_COMMON]), "child: mutex_common lock error");
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_PARENT]), "child: mutex_parent unlock error");
-        check_error(pthread_mutex_lock(&mutex[MUTEX_CHILD]), "child: mutex_child relock error");
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_COMMON]), "child: mutex_common unlock error");
+        check_error(pthread_mutex_lock(&mutex[lock_idx]), "child: mutex lock error");
+        printf("child %d\n", i + 1);
+        check_error(pthread_mutex_unlock(&mutex[unlock_idx]), "child: mutex unlock error");
     }
 
-    check_error(pthread_mutex_unlock(&mutex[MUTEX_CHILD]), "child: final mutex_child unlock error");
+    check_error(pthread_mutex_unlock(&mutex[(ITERATIONS + MUTEX_COUNT - 1) % MUTEX_COUNT]), "child: final mutex unlock error");
     return NULL;
 }
 
@@ -51,34 +48,32 @@ int main() {
     }
     pthread_mutexattr_destroy(&attr);
 
-    check_error(pthread_mutex_lock(&mutex[MUTEX_PARENT]), "main: initial mutex_parent lock error");
+    check_error(pthread_mutex_lock(&mutex[MUTEX_PARENT_START]), "main: initial mutex lock error");
     check_error(pthread_create(&thread, NULL, thread_function, NULL), "error while creating thread");
 
     for (;;) {
-        errnum = pthread_mutex_trylock(&mutex[MUTEX_CHILD]);
+        errnum = pthread_mutex_trylock(&mutex[MUTEX_CHILD_START]);
         if (errnum == EBUSY) {
             break;
         }
         if (errnum == 0) {
-            pthread_mutex_unlock(&mutex[MUTEX_CHILD]);
+            check_error(pthread_mutex_unlock(&mutex[MUTEX_CHILD_START]), "main: startup mutex unlock error");
             sched_yield();
             continue;
         }
-        check_error(errnum, "main: mutex_child trylock error");
+        check_error(errnum, "main: startup mutex trylock error");
     }
 
     for (int i = 0; i < ITERATIONS; i++) {
-        printf("parent %d\n", i + 1);
+        int lock_idx = (i + 1) % MUTEX_COUNT;
+        int unlock_idx = i % MUTEX_COUNT;
 
-        check_error(pthread_mutex_lock(&mutex[MUTEX_COMMON]), "parent: mutex_common lock error");
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_PARENT]), "parent: mutex_parent unlock error");
-        check_error(pthread_mutex_lock(&mutex[MUTEX_CHILD]), "parent: mutex_child lock error");
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_COMMON]), "parent: mutex_common unlock error");
-        check_error(pthread_mutex_lock(&mutex[MUTEX_PARENT]), "parent: mutex_parent relock error");
-        check_error(pthread_mutex_unlock(&mutex[MUTEX_CHILD]), "parent: mutex_child unlock error");
+        check_error(pthread_mutex_lock(&mutex[lock_idx]), "parent: mutex lock error");
+        printf("parent %d\n", i + 1);
+        check_error(pthread_mutex_unlock(&mutex[unlock_idx]), "parent: mutex unlock error");
     }
 
-    check_error(pthread_mutex_unlock(&mutex[MUTEX_PARENT]), "main: final mutex_parent unlock error");
+    check_error(pthread_mutex_unlock(&mutex[ITERATIONS % MUTEX_COUNT]), "main: final mutex unlock error");
     check_error(pthread_join(thread, NULL), "pthread_join error");
 
     for (int i = 0; i < MUTEX_COUNT; i++) {
