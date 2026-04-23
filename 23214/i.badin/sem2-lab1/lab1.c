@@ -10,6 +10,8 @@ void *thread_function(void *arg) {
 }
 
 int main() {
+    setvbuf(stdout, NULL, _IONBF, 0);
+
     pthread_t thread;
     int errnum;
 
