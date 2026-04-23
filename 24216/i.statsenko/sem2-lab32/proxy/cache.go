@@ -3,18 +3,18 @@ package proxy
 import "sync"
 
 type Cache struct {
-	mtx  sync.RWMutex
-	data map[string][]byte
+	mu    sync.RWMutex
+	items map[string][]byte
 }
 
 func NewCache() *Cache {
-	return &Cache{data: make(map[string][]byte)}
+	return &Cache{items: make(map[string][]byte)}
 }
 
 func (c *Cache) Get(key string) ([]byte, bool) {
-	c.mtx.RLock()
-	defer c.mtx.RUnlock()
-	v, ok := c.data[key]
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	v, ok := c.items[key]
 	if !ok {
 		return nil, false
 	}
@@ -26,7 +26,7 @@ func (c *Cache) Get(key string) ([]byte, bool) {
 func (c *Cache) Set(key string, data []byte) {
 	cp := make([]byte, len(data))
 	copy(cp, data)
-	c.mtx.Lock()
-	defer c.mtx.Unlock()
-	c.data[key] = cp
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items[key] = cp
 }

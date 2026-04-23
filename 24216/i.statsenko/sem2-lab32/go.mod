@@ -1,4 +1,4 @@
-module sem2-lab31
+module sem2-lab32
 
 go 1.25.0
 

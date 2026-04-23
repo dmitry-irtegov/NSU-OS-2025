@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"sem2-lab31/proxy"
+	"sem2-lab32/proxy"
 )
 
 func main() {
