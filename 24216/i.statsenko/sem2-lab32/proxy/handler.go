@@ -5,17 +5,12 @@ import (
 	"net"
 	"strconv"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
-func (p *Proxy) handleConn(clientFd int) {
-	defer func() {
-		unix.Shutdown(clientFd, unix.SHUT_RDWR)
-		unix.Close(clientFd)
-	}()
+func (p *Proxy) handleConn(conn *net.TCPConn) {
+	defer conn.Close()
 
-	reqBuf, err := p.readUntilDoubleCRLF(clientFd)
+	reqBuf, err := p.readUntilDoubleCRLF(conn)
 	if err != nil {
 		return
 	}
@@ -26,32 +21,29 @@ func (p *Proxy) handleConn(clientFd int) {
 	}
 
 	if data, ok := p.cache.Get(cacheKey); ok {
-		p.writeAll(clientFd, data)
+		p.writeAll(conn, data)
 		return
 	}
 
-	originFd, err := p.dialTCP(host, port)
+	upstream, err := net.Dial("tcp4", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return
 	}
-	defer func() {
-		unix.Shutdown(originFd, unix.SHUT_RDWR)
-		unix.Close(originFd)
-	}()
+	defer upstream.Close()
 
 	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host)
-	if err := p.writeAll(originFd, []byte(req)); err != nil {
+	if err := p.writeAll(upstream, []byte(req)); err != nil {
 		return
 	}
 
 	var respBuf []byte
 	var tmp [4096]byte
 	for {
-		n, err := unix.Read(originFd, tmp[:])
+		n, err := upstream.Read(tmp[:])
 		if n > 0 {
 			chunk := tmp[:n]
 			respBuf = append(respBuf, chunk...)
-			if werr := p.writeAll(clientFd, chunk); werr != nil {
+			if werr := p.writeAll(conn, chunk); werr != nil {
 				return
 			}
 		}
@@ -63,11 +55,11 @@ func (p *Proxy) handleConn(clientFd int) {
 	p.cache.Set(cacheKey, respBuf)
 }
 
-func (p *Proxy) readUntilDoubleCRLF(fd int) ([]byte, error) {
+func (p *Proxy) readUntilDoubleCRLF(conn net.Conn) ([]byte, error) {
 	var buf []byte
 	tmp := make([]byte, 4096)
 	for {
-		n, err := unix.Read(fd, tmp)
+		n, err := conn.Read(tmp)
 		if n > 0 {
 			buf = append(buf, tmp[:n]...)
 			if p.findDoubleCRLF(buf) >= 0 {
@@ -80,27 +72,9 @@ func (p *Proxy) readUntilDoubleCRLF(fd int) ([]byte, error) {
 	}
 }
 
-func (p *Proxy) dialTCP(host string, port int) (int, error) {
-	ips, err := net.LookupIP(host)
-	if err != nil {
-		return -1, err
-	}
-	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
-	if err != nil {
-		return -1, err
-	}
-	addr := &unix.SockaddrInet4{Port: port}
-	copy(addr.Addr[:], ips[0].To4())
-	if err := unix.Connect(fd, addr); err != nil {
-		unix.Close(fd)
-		return -1, err
-	}
-	return fd, nil
-}
-
-func (p *Proxy) writeAll(fd int, data []byte) error {
+func (p *Proxy) writeAll(conn net.Conn, data []byte) error {
 	for len(data) > 0 {
-		n, err := unix.Write(fd, data)
+		n, err := conn.Write(data)
 		if err != nil {
 			return err
 		}
