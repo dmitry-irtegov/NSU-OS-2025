@@ -6,10 +6,11 @@ import (
 
 type Proxy struct {
 	listenFd int
-	cache    *Cache
+	workers  []*Worker
+	next     int
 }
 
-func NewProxy(port int) (*Proxy, error) {
+func NewProxy(port, numWorkers int) (*Proxy, error) {
 	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
 		return nil, err
@@ -27,7 +28,19 @@ func NewProxy(port int) (*Proxy, error) {
 		unix.Close(fd)
 		return nil, err
 	}
-	return &Proxy{listenFd: fd, cache: NewCache()}, nil
+
+	cache := NewCache()
+	workers := make([]*Worker, numWorkers)
+	for i := range workers {
+		w, err := newWorker(cache)
+		if err != nil {
+			unix.Close(fd)
+			return nil, err
+		}
+		workers[i] = w
+	}
+
+	return &Proxy{listenFd: fd, workers: workers}, nil
 }
 
 func (p *Proxy) Run() error {
@@ -35,6 +48,10 @@ func (p *Proxy) Run() error {
 		unix.Shutdown(p.listenFd, unix.SHUT_RDWR)
 		unix.Close(p.listenFd)
 	}()
+
+	for _, w := range p.workers {
+		go w.run()
+	}
 
 	for {
 		fd, _, err := unix.Accept(p.listenFd)
@@ -44,6 +61,7 @@ func (p *Proxy) Run() error {
 			}
 			return err
 		}
-		go p.handleConn(fd)
+		p.workers[p.next].assign(fd)
+		p.next = (p.next + 1) % len(p.workers)
 	}
 }
