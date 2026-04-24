@@ -1,11 +1,9 @@
-/* * File:   pi_pthreads_refactored.c
- * Multi-threaded calculation of Pi using Leibniz series.
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <errno.h>
+#include <limits.h>
 
 #define STEPS_AMOUNT 200000000
 
@@ -39,11 +37,17 @@ bool parse_args(int argc, char** argv, int* num_threads) {
         return false;
     }
     
-    *num_threads = atoi(argv[1]);
-    if (*num_threads <= 0) {
-        fprintf(stderr, "Error: Num of threads cannot be negative.\n");
+    char* endptr;
+    errno = 0;
+    
+    long val = strtol(argv[1], &endptr, 10);
+    
+    if (endptr == argv[1] || *endptr != '\0' || errno == ERANGE || val <= 0 || val > INT_MAX) {
+        fprintf(stderr, "Error: Invalid num of threads. Please provide a valid positive integer.\n");
         return false;
     }
+    
+    *num_threads = (int)val;
     
     return true;
 }
