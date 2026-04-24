@@ -26,7 +26,9 @@ void handle_error(int en, const char *msg) {
 
 void sigint_handler(int sig) {
     (void)sig;
+    pthread_mutex_lock(&stop_mutex);
     stop_flag = 1;
+    pthread_mutex_unlock(&stop_mutex);
 }
 
 int is_stopped(void) {
