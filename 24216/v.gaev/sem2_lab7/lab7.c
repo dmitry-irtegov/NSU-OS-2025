@@ -204,4 +204,20 @@ void* copy_dir_thread(void *arg) {
 
 int main(int argc, char *argv[]) {
     if (argc != 3) {
-        fprintf(stderr, "Использование: %s <исходный_каталог> <целевой_каталог
+        fprintf(stderr, "Использование: %s <исходный_каталог> <целевой_каталог>\n", argv[0]);
+        return 1;
+    }
+
+    thread_args_t *args = malloc(sizeof(thread_args_t));
+    args->src_path = strdup(argv[1]);
+    args->dst_path = strdup(argv[2]);
+
+    pthread_t tid;
+    if (pthread_create(&tid, NULL, copy_dir_thread, args) != 0) {
+        fprintf(stderr, "Ошибка создания корневой нити\n");
+        return 1;
+    }
+
+    pthread_join(tid, NULL);
+    return 0;
+}
