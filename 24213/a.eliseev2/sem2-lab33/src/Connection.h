@@ -76,7 +76,7 @@ class ClientConnection final : public Connection {
     std::shared_ptr<MessageBuffer> request;
     std::shared_ptr<MessageBuffer> response;
     size_t responseReadPos;
-    
+
     std::optional<http::RequestLine> requestLine;
     size_t requestParsePos;
 };
@@ -95,13 +95,26 @@ class ServerConnection final : public Connection {
     bool serviceRead(ResponseCache &cache,
                      ConnectionManager &connectionManager);
 
+    bool parseResponse(MessageBuffer::Writer &writer);
+    bool parseChunks(MessageBuffer::Writer &witer, ConnectionManager &connectionManager);
+
     const int socketFd;
     http::RequestLine requestLine;
     std::shared_ptr<MessageBuffer> request;
     std::shared_ptr<MessageBuffer> response;
     size_t requestReadPos;
     bool cached;
-    bool statusParsed;
+
+    std::optional<http::StatusLine> statusLine;
+    bool headersParsed;
+    bool firstChunkParsed;
+    enum class Termination {
+        Close,
+        Length,
+        Chunked,
+    } termination;
+    size_t responseParsePos;
+    size_t remainingChunkSize;
 };
 
 } // namespace proxy

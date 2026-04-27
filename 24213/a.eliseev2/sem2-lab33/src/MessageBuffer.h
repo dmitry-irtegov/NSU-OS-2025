@@ -45,8 +45,10 @@ class MessageBuffer {
 
         std::vector<char> &data();
 
-        char *reserve(size_t size);
+        char *allocate(size_t size);
         void written(size_t size);
+        
+        void reserve(size_t size);
 
         void appendRange(const char *data, size_t size);
         void insertRange(const char *data, size_t size, size_t at);
@@ -57,7 +59,7 @@ class MessageBuffer {
 
       private:
         MessageBuffer *buffer;
-        size_t reservedSize;
+        size_t allocSize;
     };
 
     MessageBuffer();

@@ -68,7 +68,7 @@ void MessageBuffer::Reader::advance(size_t size) {
 }
 
 MessageBuffer::Writer::Writer(MessageBuffer &buffer)
-    : buffer(&buffer), reservedSize(0) {
+    : buffer(&buffer), allocSize(0) {
     pthread_mutex_lock(&buffer.lock);
 }
 
@@ -80,20 +80,20 @@ std::vector<char> &MessageBuffer::Writer::data() {
     return buffer->data;
 }
 
-char *MessageBuffer::Writer::reserve(size_t size) {
-    size_t oldSize = buffer->data.size() - reservedSize;
+char *MessageBuffer::Writer::allocate(size_t size) {
+    size_t oldSize = buffer->data.size() - allocSize;
     buffer->data.resize(oldSize + size);
-    reservedSize = size;
+    allocSize = size;
     return buffer->data.data() + oldSize;
 }
 
 void MessageBuffer::Writer::written(size_t size) {
-    buffer->data.resize(buffer->data.size() - reservedSize + size);
-    reservedSize = 0;
+    buffer->data.resize(buffer->data.size() - allocSize + size);
+    allocSize = 0;
 }
 
 void MessageBuffer::Writer::appendRange(const char *data, size_t size) {
-    assert(reservedSize == 0 && "Write already in progress");
+    assert(allocSize == 0 && "Write already in progress");
     std::vector<char> &bufData = buffer->data;
     bufData.reserve(bufData.size() + size);
     bufData.insert(bufData.end(), data, data + size);
@@ -101,14 +101,14 @@ void MessageBuffer::Writer::appendRange(const char *data, size_t size) {
 
 void MessageBuffer::Writer::insertRange(const char *data, size_t size,
                                         size_t at) {
-    assert(reservedSize == 0 && "Write already in progress");
+    assert(allocSize == 0 && "Write already in progress");
     std::vector<char> &bufData = buffer->data;
     bufData.reserve(bufData.size() + size);
     bufData.insert(bufData.begin() + at, data, data + size);
 }
 
 void MessageBuffer::Writer::removeRange(size_t at, size_t size) {
-    assert(reservedSize == 0 && "Write already in progress");
+    assert(allocSize == 0 && "Write already in progress");
     std::vector<char> &data = buffer->data;
     data.erase(data.begin() + at, data.begin() + at + size);
 }
@@ -118,10 +118,14 @@ void MessageBuffer::Writer::end() {
 }
 
 void MessageBuffer::Writer::commit(MessageNotifier &notifier) {
-    buffer->readableSize = buffer->data.size() - reservedSize;
+    buffer->readableSize = buffer->data.size() - allocSize;
     for (int fd : buffer->subscribers) {
         notifier.notifyWrite(fd);
     }
+}
+
+void MessageBuffer::Writer::reserve(size_t size) {
+    buffer->data.reserve(size);
 }
 
 } // namespace proxy

@@ -64,6 +64,24 @@ static bool readEol(const char **ptr, const char *end) {
     return true;
 }
 
+bool readChunkEnd(const char **data, const char *end) {
+    if (*data == end) {
+        return false;
+    }
+    if (**data != '\r') {
+        throw std::runtime_error("Invalid line terminator. CR expected.");
+    }
+    (*data)++;
+    if (*data == end) {
+        return false;
+    }
+    if (**data != '\n') {
+        throw std::runtime_error("Invalid line terminator. LF expected.");
+    }
+    (*data)++;
+    return true;
+}
+
 static bool parseWord(const char **data, const char *end, std::string &word,
                       const char *separators = " \n\r") {
     const char *start = *data;
@@ -71,6 +89,29 @@ static bool parseWord(const char **data, const char *end, std::string &word,
         return false;
     }
     word = std::string(start, *data);
+    return true;
+}
+
+static bool parseHex(const char **ptr, const char *end, size_t &value) {
+    value = 0;
+    while (*ptr < end) {
+        char ch = **ptr;
+        if (!std::isxdigit(ch)) {
+            break;
+        }
+        (*ptr)++;
+        value *= 16;
+        if (ch >= '0' && ch <= '9') {
+            value += ch - '0';
+        } else if (ch >= 'a' && ch <= 'f') {
+            value += ch - 'a' + 10;
+        } else if (ch >= 'A' && ch <= 'F') {
+            value += ch - 'A' + 10;
+        }
+    }
+    if (*ptr == end) {
+        return false;
+    }
     return true;
 }
 
@@ -261,9 +302,13 @@ bool Header::parse(const char **data, const char *end, Header &header,
     }
     if (**data == '\r' || **data == '\n') {
         info.nameStart = *data;
+        info.nameEnd = *data;
+        info.valueStart = *data;
+        info.valueEnd = *data;
         if (!readEol(data, end)) {
             return false;
         }
+        info.end = *data;
         info.isEndOfHeaders = true;
         return true;
     }
@@ -299,6 +344,23 @@ bool Header::parse(const char **data, const char *end, Header &header,
     }
     header.name = std::string(info.nameStart, info.nameEnd);
     header.value = std::string(info.valueStart, info.valueEnd);
+    info.end = *data;
+    return true;
+}
+
+bool ChunkHeader::parse(const char **data, const char *end, ChunkHeader &header,
+                        ParseInfo &info) {
+    info.sizeStart = *data;
+    if (!parseHex(data, end, header.chunkSize)) {
+        return false;
+    }
+    info.sizeEnd = *data;
+    if (!findChar(data, end, "\r")) {
+        return false;
+    }
+    if (!readChunkEnd(data, end)) {
+        return false;
+    }
     info.end = *data;
     return true;
 }

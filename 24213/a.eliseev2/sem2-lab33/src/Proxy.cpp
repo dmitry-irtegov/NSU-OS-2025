@@ -5,7 +5,9 @@
 #include "MessageBuffer.h"
 #include <algorithm>
 #include <arpa/inet.h>
+#include <cassert>
 #include <cstring>
+#include <fcntl.h>
 #include <iostream>
 #include <netdb.h>
 #include <poll.h>
@@ -30,57 +32,55 @@ Proxy::Proxy(uint16_t listenPort, std::string defaultHost, uint16_t defaultPort)
         throw std::system_error(errno, std::generic_category(),
                                 "Could not open control pipe");
     }
+
     controlReadFd = pipeFds[0];
     controlWriteFd = pipeFds[1];
 
-    int sockFd = ::socket(PF_INET, SOCK_STREAM, 0);
-    if (sockFd == -1) {
-        throw std::system_error(errno, std::generic_category(),
-                                "Could not open listening socket");
-    }
+    try {
+        int sockFd = ::socket(PF_INET, SOCK_STREAM, 0);
+        if (sockFd == -1) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "Could not open listening socket");
+        }
 
-    int reuseAddr = 1;
-    if (::setsockopt(sockFd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr,
-                     sizeof(reuseAddr))) {
-        int error = errno;
-        ::close(sockFd);
+        try {
+            int reuseAddr = 1;
+            if (::setsockopt(sockFd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr,
+                             sizeof(reuseAddr))) {
+                throw std::system_error(errno, std::generic_category(),
+                                        "Could not set SO_REUSEADDR");
+            }
+
+            sockaddr_in addr = {};
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = INADDR_ANY;
+            addr.sin_port = ::htons(listenPort);
+
+            if (bind(sockFd, (struct sockaddr *)&addr, sizeof(addr))) {
+                throw std::system_error(errno, std::generic_category(),
+                                        "Could not bind listening socket");
+            }
+            if (listen(sockFd, CONN_QUEUE_SIZE)) {
+                throw std::system_error(errno, std::generic_category(),
+                                        "Could not listen on socket");
+            }
+            pollFds.push_back({
+                .fd = sockFd,
+                .events = POLLIN,
+                .revents = 0,
+            });
+            pollFds.push_back({
+                .fd = controlReadFd,
+                .events = POLLIN,
+                .revents = 0,
+            });
+        } catch (std::runtime_error &re) {
+            ::close(sockFd);
+        }
+    } catch (std::runtime_error &re) {
         ::close(controlReadFd);
         ::close(controlWriteFd);
-        throw std::system_error(error, std::generic_category(),
-                                "Could not set SO_REUSEADDR");
     }
-
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = ::htons(listenPort);
-
-    if (bind(sockFd, (struct sockaddr *)&addr, sizeof(addr))) {
-        int error = errno;
-        ::close(sockFd);
-        ::close(controlReadFd);
-        ::close(controlWriteFd);
-        throw std::system_error(error, std::generic_category(),
-                                "Could not bind listening socket");
-    }
-    if (listen(sockFd, CONN_QUEUE_SIZE)) {
-        int error = errno;
-        ::close(sockFd);
-        ::close(controlReadFd);
-        ::close(controlWriteFd);
-        throw std::system_error(error, std::generic_category(),
-                                "Could not listen on socket");
-    }
-    pollFds.push_back({
-        .fd = sockFd,
-        .events = POLLIN,
-        .revents = 0,
-    });
-    pollFds.push_back({
-        .fd = controlReadFd,
-        .events = POLLIN,
-        .revents = 0,
-    });
 }
 
 static sockaddr resolveAddress(const char *hostname, uint16_t port,
@@ -160,6 +160,7 @@ Proxy::makeRequest(const http::RequestLine &line,
     sendControlMessage({
         .fd = serverFd,
         .events = pending ? SocketEvents::Write : SocketEvents::ReadWrite,
+        .action = ControlMessage::Action::Add,
     });
 
     return response;
@@ -169,6 +170,7 @@ void Proxy::notifyWrite(int fd) {
     sendControlMessage({
         .fd = fd,
         .events = SocketEvents::Write,
+        .action = ControlMessage::Action::Update,
     });
 }
 
@@ -196,6 +198,9 @@ void Proxy::acceptNewConnections() {
     };
     pthread_mutex_unlock(&connectionLock);
 
+    auto it = fdIndexMap.find(clientFd);
+    assert(it == fdIndexMap.end() && "Client fd still in use");
+
     pollFds.push_back({
         .fd = clientFd,
         .events = POLLRDNORM,
@@ -214,60 +219,77 @@ void Proxy::sendControlMessage(ControlMessage message) {
 
 bool Proxy::readControlMessage(ControlMessage &message) {
     pollfd &controlPollFd = pollFds[1];
-    if (!(controlPollFd.revents & POLLIN)) {
-        return false;
+    while (true) {
+        if (::poll(&controlPollFd, 1, 0) == -1) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "Pipe poll failed");
+        }
+        if (!(controlPollFd.revents & POLLIN)) {
+            return false;
+        }
+
+        ssize_t count = ::read(controlPollFd.fd, messageBuffer,
+                               sizeof(messageBuffer) - messageReadPos);
+        if (count < 0) {
+            throw std::system_error(errno, std::generic_category(),
+                                    "Could not read from control pipe");
+        }
+        messageReadPos += count;
+        if (messageReadPos != sizeof(messageBuffer)) {
+            continue;
+        }
+        messageReadPos = 0;
+        std::memcpy(&message, messageBuffer, sizeof(ControlMessage));
+        return true;
     }
-    ssize_t count = ::read(controlPollFd.fd, messageBuffer,
-                           sizeof(messageBuffer) - messageReadPos);
-    if (count < 0) {
-        throw std::system_error(errno, std::generic_category(),
-                                "Could not read from control pipe");
-    }
-    messageReadPos += count;
-    if (messageReadPos != sizeof(messageBuffer)) {
-        return false;
-    }
-    messageReadPos = 0;
-    std::memcpy(&message, messageBuffer, sizeof(ControlMessage));
-    return true;
 }
 
 void Proxy::handleControlMessages() {
     ControlMessage message;
-    if (!readControlMessage(message)) {
-        return;
-    }
+    while (readControlMessage(message)) {
+        int fd = message.fd;
+        auto it = fdIndexMap.find(fd);
 
-    int fd = message.fd;
-    auto it = fdIndexMap.find(fd);
-
-    if (it == fdIndexMap.end()) {
-        pollFds.push_back({
-            .fd = message.fd,
-            .events = static_cast<decltype(pollfd::events)>(message.events),
-            .revents = 0,
-        });
-        fdIndexMap[message.fd] = pollFds.size() - 1;
-    } else if (message.close) {
-        size_t index = fdIndexMap[fd];
-        pollFds.erase(pollFds.begin() + index);
-        fdIndexMap.erase(fd);
-        for (auto &entry : fdIndexMap) {
-            if (entry.second > index) {
-                entry.second--;
+        switch (message.action) {
+        case ControlMessage::Action::Add: {
+            assert(it == fdIndexMap.end() && "Tried to add a pollfd twice");
+            pollFds.push_back({
+                .fd = fd,
+                .events = static_cast<decltype(pollfd::events)>(message.events),
+                .revents = 0,
+            });
+            fdIndexMap[message.fd] = pollFds.size() - 1;
+        } break;
+        case ControlMessage::Action::Close: {
+            assert(it != fdIndexMap.end() &&
+                   "Tried to close a non-existent fd");
+            size_t index = it->second;
+            pollFds.erase(pollFds.begin() + index);
+            fdIndexMap.erase(fd);
+            for (auto &entry : fdIndexMap) {
+                if (entry.second > index) {
+                    entry.second--;
+                }
             }
+            eventQueue.erase(
+                std::remove_if(eventQueue.begin(), eventQueue.end(),
+                               [fd](pollfd pollfd) { return pollfd.fd == fd; }),
+                eventQueue.end());
+            ::close(fd);
+        } break;
+        case ControlMessage::Action::Update: {
+            if (it == fdIndexMap.end()) {
+                // Stale fd, ignore
+                break;
+            }
+            pollfd &pollFd = pollFds[it->second];
+            if (pollFd.revents) {
+                pollFd.revents = 0;
+            }
+            pollFd.events |=
+                static_cast<decltype(pollfd::events)>(message.events);
+        } break;
         }
-        eventQueue.erase(
-            std::remove_if(eventQueue.begin(), eventQueue.end(),
-                           [fd](pollfd pollfd) { return pollfd.fd == fd; }),
-            eventQueue.end());
-        ::close(fd);
-    } else {
-        pollfd &pollFd = pollFds[it->second];
-        if (pollFd.revents) {
-            pollFd.revents = 0;
-        }
-        pollFd.events |= static_cast<decltype(pollfd::events)>(message.events);
     }
 }
 
@@ -278,7 +300,10 @@ void Proxy::disconnect(ConnectionInfo &connection) {
     connections.erase(fd);
     pthread_mutex_unlock(&connectionLock);
 
-    sendControlMessage({.fd = fd, .close = true});
+    sendControlMessage({
+        .fd = fd,
+        .action = ControlMessage::Action::Close,
+    });
 }
 
 void Proxy::servicePending(ConnectionInfo &connection, SocketEvents events) {
@@ -304,7 +329,8 @@ void Proxy::servicePending(ConnectionInfo &connection, SocketEvents events) {
 
     sendControlMessage({
         .fd = connection.fd,
-        .events = SocketEvents::Read | SocketEvents::Write,
+        .events = SocketEvents::ReadWrite,
+        .action = ControlMessage::Action::Update,
     });
 }
 
@@ -333,6 +359,7 @@ void Proxy::serviceConnected(ConnectionInfo &connection, SocketEvents events) {
         .fd = connection.fd,
         .events = static_cast<SocketEvents>(
             static_cast<decltype(pollfd::events)>(result) >> 1),
+        .action = ControlMessage::Action::Update,
     });
 }
 
@@ -369,6 +396,7 @@ void Proxy::service() {
     handleControlMessages();
     for (size_t i = 2; i < pollFds.size(); i++) {
         pollfd &pollFd = pollFds[i];
+        assert(!(pollFd.events & POLLNVAL) && "Pollfds got messed up");
         if (pollFd.revents) {
             eventQueue.push_back(pollFd);
             pollFd.events = 0;

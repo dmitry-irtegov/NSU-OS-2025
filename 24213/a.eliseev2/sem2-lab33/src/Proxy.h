@@ -34,7 +34,11 @@ class Proxy : private ConnectionManager {
     struct ControlMessage {
         int fd;
         SocketEvents events;
-        bool close;
+        enum class Action {
+            Add,
+            Close,
+            Update,
+        } action;
     };
 
     std::shared_ptr<MessageBuffer>
@@ -66,7 +70,7 @@ class Proxy : private ConnectionManager {
     int controlReadFd;
     int controlWriteFd;
     size_t messageReadPos;
-    
+
     pthread_mutex_t pollLock;
     pthread_mutex_t connectionLock;
 };
