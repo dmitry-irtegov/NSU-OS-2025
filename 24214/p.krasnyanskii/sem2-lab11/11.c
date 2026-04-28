@@ -49,9 +49,9 @@ int main(void) {
     usleep(100000);
 
     for (int i = 0; i < n; i++) {
-        fprintf(stderr, "Parent thread: %d\n", i + 1);
         pthread_mutex_unlock(&m[(i + 2) % 3]);
         pthread_mutex_lock(&m[(i + 1) % 3]);
+        fprintf(stderr, "Parent thread: %d\n", i + 1);
     }
 
     pthread_mutex_unlock(&m[0]);
