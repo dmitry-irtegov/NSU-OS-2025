@@ -82,17 +82,19 @@ static void printHelp(std::ostream &stream, const char *progamName) {
 }
 
 int main(int argc, char *argv[]) {
-    ProxyArgs args;
-    if (ProxyArgs::parse(argc, argv, args)) {
-        printHelp(std::cerr, argv[0]);
-        return 1;
-    }
-    if (args.help) {
-        printHelp(std::cout, argv[0]);
-        return 0;
-    }
     try {
+        ProxyArgs args;
+        if (ProxyArgs::parse(argc, argv, args)) {
+            printHelp(std::cerr, argv[0]);
+            return 1;
+        }
+        if (args.help) {
+            printHelp(std::cout, argv[0]);
+            return 0;
+        }
         Proxy proxy = Proxy(args.localPort, args.remoteHost, args.remotePort);
+        std::cerr << "Listening on port " << args.localPort << ".\n";
+
         while (true) {
             proxy.service();
         }

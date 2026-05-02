@@ -3,7 +3,7 @@ SRC_DIR = src
 TARGET_EXEC = $(BUILD_DIR)/proxy.out
 
 CCC = g++
-CPPFLAGS = -Wall -I$(SRC_DIR) -MMD -MP -std=c++17 -O2
+CPPFLAGS = -Wall -I$(SRC_DIR) -MMD -MP -std=c++17 -g
 
 SOURCES = \
 	Connection.cpp \

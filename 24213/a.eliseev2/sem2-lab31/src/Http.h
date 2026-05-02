@@ -96,9 +96,19 @@ struct Header {
     std::string value;
 
     bool nameEquals(const char *str) {
-        return std::equal(name.begin(), name.end(), str, str + std::strlen(str),
-                          [](unsigned char a, unsigned char b) {
-                              return std::tolower(a) == std::tolower(b);
+        return compareIgnoreCase(name.c_str(), str);
+    }
+
+    bool valueEquals(const char *str) {
+        return compareIgnoreCase(value.c_str(), str);
+    }
+
+  private:
+    static bool compareIgnoreCase(const char *str1, const char *str2) {
+        return std::equal(str1, str1 + std::strlen(str1), str2,
+                          str2 + std::strlen(str2),
+                          [](unsigned char char1, unsigned char char2) {
+                              return std::tolower(char1) == std::tolower(char2);
                           });
     }
 };
@@ -123,6 +133,19 @@ struct StatusLine {
     Version version;
     ResponseCode code;
 };
+
+struct ChunkHeader {
+    struct ParseInfo {
+        const char *sizeStart;
+        const char *sizeEnd;
+        const char *end;
+    };
+    static bool parse(const char **data, const char *end, ChunkHeader &header,
+                      ParseInfo &info);
+    size_t chunkSize;
+};
+
+bool readChunkEnd(const char **data, const char *end);
 
 } // namespace http
 } // namespace proxy

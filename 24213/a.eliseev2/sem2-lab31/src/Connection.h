@@ -14,6 +14,7 @@ enum class SocketEvents {
     None = 0,
     Read = POLLRDNORM,
     Write = POLLOUT,
+    ReadWrite = POLLOUT | POLLRDNORM,
     Error = POLLERR | POLLHUP,
 };
 
@@ -94,13 +95,26 @@ class ServerConnection final : public Connection {
     bool serviceRead(ResponseCache &cache,
                      ConnectionManager &connectionManager);
 
+    bool parseResponse(MessageBuffer::Writer &writer);
+    bool parseChunks(MessageBuffer::Writer &witer, ConnectionManager &connectionManager);
+
     const int socketFd;
     http::RequestLine requestLine;
     std::shared_ptr<MessageBuffer> request;
     std::shared_ptr<MessageBuffer> response;
     size_t requestReadPos;
     bool cached;
-    bool statusParsed;
+
+    std::optional<http::StatusLine> statusLine;
+    bool headersParsed;
+    bool firstChunkParsed;
+    enum class Termination {
+        Close,
+        Length,
+        Chunked,
+    } termination;
+    size_t responseParsePos;
+    size_t remainingChunkSize;
 };
 
 } // namespace proxy
