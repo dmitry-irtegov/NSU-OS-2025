@@ -5,12 +5,17 @@ import (
 	"net"
 	"strconv"
 	"strings"
+
+	"golang.org/x/sys/unix"
 )
 
-func (p *Proxy) handleConn(conn *net.TCPConn) {
-	defer conn.Close()
+func (p *Proxy) handleConn(clientFd int) {
+	defer func() {
+		unix.Shutdown(clientFd, unix.SHUT_RDWR)
+		unix.Close(clientFd)
+	}()
 
-	reqBuf, err := p.readUntilDoubleCRLF(conn)
+	reqBuf, err := p.readUntilDoubleCRLF(clientFd)
 	if err != nil {
 		return
 	}
@@ -21,33 +26,39 @@ func (p *Proxy) handleConn(conn *net.TCPConn) {
 	}
 
 	if data, ok := p.cache.Get(cacheKey); ok {
-		p.writeAll(conn, data)
+		p.writeAll(clientFd, data)
 		return
 	}
 
-	upstream, err := net.Dial("tcp4", fmt.Sprintf("%s:%d", host, port))
+	originFd, err := p.dialTCP(host, port)
 	if err != nil {
 		return
 	}
-	defer upstream.Close()
+	defer func() {
+		unix.Shutdown(originFd, unix.SHUT_RDWR)
+		unix.Close(originFd)
+	}()
 
 	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host)
-	if err := p.writeAll(upstream, []byte(req)); err != nil {
+	if err := p.writeAll(originFd, []byte(req)); err != nil {
 		return
 	}
 
 	var respBuf []byte
 	var tmp [4096]byte
 	for {
-		n, err := upstream.Read(tmp[:])
+		n, err := unix.Read(originFd, tmp[:])
 		if n > 0 {
 			chunk := tmp[:n]
 			respBuf = append(respBuf, chunk...)
-			if werr := p.writeAll(conn, chunk); werr != nil {
+			if werr := p.writeAll(clientFd, chunk); werr != nil {
 				return
 			}
 		}
-		if err != nil || n == 0 {
+		if err != nil {
+			return
+		}
+		if n == 0 {
 			break
 		}
 	}
@@ -55,11 +66,11 @@ func (p *Proxy) handleConn(conn *net.TCPConn) {
 	p.cache.Set(cacheKey, respBuf)
 }
 
-func (p *Proxy) readUntilDoubleCRLF(conn net.Conn) ([]byte, error) {
+func (p *Proxy) readUntilDoubleCRLF(fd int) ([]byte, error) {
 	var buf []byte
 	tmp := make([]byte, 4096)
 	for {
-		n, err := conn.Read(tmp)
+		n, err := unix.Read(fd, tmp)
 		if n > 0 {
 			buf = append(buf, tmp[:n]...)
 			if p.findDoubleCRLF(buf) >= 0 {
@@ -72,9 +83,28 @@ func (p *Proxy) readUntilDoubleCRLF(conn net.Conn) ([]byte, error) {
 	}
 }
 
-func (p *Proxy) writeAll(conn net.Conn, data []byte) error {
+func (p *Proxy) dialTCP(host string, port int) (int, error) {
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return -1, err
+	}
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
+	if err != nil {
+		return -1, err
+	}
+	addr := &unix.SockaddrInet4{Port: port}
+	copy(addr.Addr[:], ips[0].To4())
+	if err := unix.Connect(fd, addr); err != nil {
+		unix.Shutdown(fd, unix.SHUT_RDWR)
+		unix.Close(fd)
+		return -1, err
+	}
+	return fd, nil
+}
+
+func (p *Proxy) writeAll(fd int, data []byte) error {
 	for len(data) > 0 {
-		n, err := conn.Write(data)
+		n, err := unix.Write(fd, data)
 		if err != nil {
 			return err
 		}
