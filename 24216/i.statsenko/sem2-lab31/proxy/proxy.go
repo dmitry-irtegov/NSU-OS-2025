@@ -5,6 +5,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -89,7 +90,7 @@ func NewProxy(port int) (*Proxy, error) {
 		unix.Close(fd)
 		return nil, err
 	}
-	if err := unix.Listen(fd, 128); err != nil {
+	if err := syscall.Listen(fd, 128); err != nil {
 		unix.Close(fd)
 		return nil, err
 	}
