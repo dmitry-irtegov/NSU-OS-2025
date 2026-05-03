@@ -240,7 +240,9 @@ func (p *Proxy) handleForwarding(c *proxyConn, rset, wset *fdSet) bool {
 			unix.Close(c.originFd)
 			c.originFd = -1
 			c.originDone = true
-			p.cache.Set(c.cacheKey, c.respBuf)
+			if err == nil {
+				p.cache.Set(c.cacheKey, c.respBuf)
+			}
 		}
 	}
 	if wset.isSet(c.clientFd) && c.sendOff < len(c.respBuf) {
