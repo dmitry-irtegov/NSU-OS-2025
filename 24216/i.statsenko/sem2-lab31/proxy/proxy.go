@@ -34,16 +34,8 @@ func (s *fdSet) isSet(fd int) bool {
 	return s.Bits[fd/64]&(1<<(uint(fd)%64)) != 0
 }
 
-func (s *fdSet) setMax(fd int, maxFd *int) {
-	s.set(fd)
-	if fd > *maxFd {
-		*maxFd = fd
-	}
-}
-
 type proxyConn struct {
 	clientFd   int
-	clientConn *net.TCPConn
 	originFd   int
 	state      connState
 	reqBuf     []byte
@@ -56,10 +48,10 @@ type proxyConn struct {
 }
 
 func (c *proxyConn) close() {
-	if c.clientConn != nil {
-		c.clientConn.Close()
+	if c.clientFd >= 0 {
+		unix.Shutdown(c.clientFd, unix.SHUT_RDWR)
+		unix.Close(c.clientFd)
 		c.clientFd = -1
-		c.clientConn = nil
 	}
 	if c.originFd >= 0 {
 		unix.Shutdown(c.originFd, unix.SHUT_RDWR)
@@ -78,69 +70,83 @@ func (c *proxyConn) headerEnd() int {
 }
 
 type Proxy struct {
-	ln       *net.TCPListener
 	listenFd int
 	cache    *Cache
 	conns    map[int]*proxyConn
 }
 
 func NewProxy(port int) (*Proxy, error) {
-	ln, err := net.Listen("tcp4", fmt.Sprintf(":%d", port))
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
 		return nil, err
 	}
-	tcpLn := ln.(*net.TCPListener)
-	raw, err := tcpLn.SyscallConn()
-	if err != nil {
-		tcpLn.Close()
+	if err := unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
+		unix.Close(fd)
 		return nil, err
 	}
-	var listenFd int
-	if err := raw.Control(func(fd uintptr) { listenFd = int(fd) }); err != nil {
-		tcpLn.Close()
+	addr := &unix.SockaddrInet4{Port: port}
+	if err := unix.Bind(fd, addr); err != nil {
+		unix.Close(fd)
+		return nil, err
+	}
+	if err := unix.Listen(fd, 128); err != nil {
+		unix.Close(fd)
 		return nil, err
 	}
 	return &Proxy{
-		ln:       tcpLn,
-		listenFd: listenFd,
+		listenFd: fd,
 		cache:    NewCache(),
 		conns:    make(map[int]*proxyConn),
 	}, nil
 }
 
 func (p *Proxy) Run() error {
-	defer p.ln.Close()
+	defer func() {
+		unix.Shutdown(p.listenFd, unix.SHUT_RDWR)
+		unix.Close(p.listenFd)
+	}()
 
 	for {
-		var rset, wset fdSet
-		rset.zero()
-		wset.zero()
-		maxFd := p.listenFd
-		rset.set(p.listenFd)
+		fds := make([]unix.PollFd, 0, 1+len(p.conns)*2)
+		fds = append(fds, unix.PollFd{Fd: int32(p.listenFd), Events: unix.POLLIN})
 
 		for _, c := range p.conns {
 			switch c.state {
 			case stateReading:
-				rset.setMax(c.clientFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLIN})
 			case stateConnecting:
-				wset.setMax(c.originFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLOUT})
 			case stateForwarding:
 				if !c.originDone {
-					rset.setMax(c.originFd, &maxFd)
+					fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLIN})
 				}
 				if c.sendOff < len(c.respBuf) {
-					wset.setMax(c.clientFd, &maxFd)
+					fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLOUT})
 				}
 			case stateSending:
-				wset.setMax(c.clientFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLOUT})
 			}
 		}
 
-		if _, err := unix.Select(maxFd+1, &rset.FdSet, &wset.FdSet, nil, nil); err != nil {
+		if _, err := unix.Poll(fds, -1); err != nil {
 			if err == unix.EINTR {
 				continue
 			}
 			return err
+		}
+
+		var rset, wset fdSet
+		rset.zero()
+		wset.zero()
+		errMask := int16(unix.POLLHUP | unix.POLLERR | unix.POLLNVAL)
+		for _, pfd := range fds {
+			fd := int(pfd.Fd)
+			if pfd.Revents&(unix.POLLIN|errMask) != 0 {
+				rset.set(fd)
+			}
+			if pfd.Revents&(unix.POLLOUT|errMask) != 0 {
+				wset.set(fd)
+			}
 		}
 
 		if rset.isSet(p.listenFd) {
@@ -160,18 +166,11 @@ func (p *Proxy) Run() error {
 }
 
 func (p *Proxy) accept() {
-	conn, err := p.ln.AcceptTCP()
+	fd, _, err := unix.Accept(p.listenFd)
 	if err != nil {
 		return
 	}
-	raw, err := conn.SyscallConn()
-	if err != nil {
-		conn.Close()
-		return
-	}
-	var fd int
-	raw.Control(func(f uintptr) { fd = int(f) })
-	p.conns[fd] = &proxyConn{clientFd: fd, clientConn: conn, originFd: -1, state: stateReading}
+	p.conns[fd] = &proxyConn{clientFd: fd, originFd: -1, state: stateReading}
 }
 
 func (p *Proxy) handle(c *proxyConn, rset, wset *fdSet) bool {
@@ -202,9 +201,6 @@ func (p *Proxy) handleReading(c *proxyConn, rset *fdSet) bool {
 				return true
 			}
 		}
-	}
-	if err == unix.EAGAIN {
-		return false
 	}
 	if err != nil || n == 0 {
 		c.close()
@@ -251,7 +247,7 @@ func (p *Proxy) handleForwarding(c *proxyConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.sendOff += n
 		}
-		if err != nil && err != unix.EAGAIN {
+		if err != nil {
 			c.close()
 			return true
 		}
@@ -275,11 +271,7 @@ func (p *Proxy) handleSending(c *proxyConn, wset *fdSet) bool {
 	if n > 0 {
 		c.sendOff += n
 	}
-	if err != nil && err != unix.EAGAIN {
-		c.close()
-		return true
-	}
-	if c.sendOff >= len(c.respBuf) {
+	if err != nil || c.sendOff >= len(c.respBuf) {
 		c.close()
 		return true
 	}
