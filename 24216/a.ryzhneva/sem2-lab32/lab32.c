@@ -41,6 +41,13 @@ void sig_handler(int signum) {
     }
 }
 
+void close_connection(int fd) {
+    if (fd >= 0) {
+        shutdown(fd, SHUT_RDWR);
+        close(fd);
+    }
+}
+
 CacheEntry* cache_lookup(const char *uri) {
     CacheEntry *curr = cache_head;
     while (curr != NULL) {
@@ -124,11 +131,11 @@ void* handle_client(void* arg) {
             if (errno == EINTR) {
                 continue;
             }
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
             return NULL;
         } else if (bytes_read == 0) {
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
             return NULL;
         }
@@ -141,14 +148,14 @@ void* handle_client(void* arg) {
         }
         
         if (req_len >= BUF_SIZE - 1) {
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
             return NULL;
         }
     }
 
     if (sscanf(req_buf, "%15s %2047s %15s", method, uri, version) != 3 || strncmp(method, "GET", 3) != 0) {
-        close(client_fd);
+        close_connection(client_fd);
         free(arg);
         return NULL;
     }
@@ -165,7 +172,7 @@ void* handle_client(void* arg) {
         entry = (CacheEntry *)malloc(sizeof(CacheEntry));
         if (!entry) {
             pthread_mutex_unlock(&cache_list_mutex);
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
             return NULL;
         }
@@ -184,7 +191,7 @@ void* handle_client(void* arg) {
             }
             free(entry);
             pthread_mutex_unlock(&cache_list_mutex);
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
             return NULL;
         }
@@ -207,7 +214,7 @@ void* handle_client(void* arg) {
         if (server_fd >= 0 && connect(server_fd, target_addrinfo->ai_addr, target_addrinfo->ai_addrlen) == 0) {
 
             if (send_all(server_fd, req_buf, req_len) < 0) {
-                close(server_fd);
+                close_connection(server_fd);
                 server_fd = -1;
             }
 
@@ -264,12 +271,12 @@ void* handle_client(void* arg) {
                 }
             }
             if (server_fd >= 0) {
-                close(server_fd);
+                close_connection(server_fd);
             }
 
         } else {
             if (server_fd >= 0) {
-                close(server_fd);
+                close_connection(server_fd);
             }
             const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
             send_all(client_fd, err_502, strlen(err_502));
@@ -315,7 +322,7 @@ void* handle_client(void* arg) {
     entry->reference_count--;
     pthread_mutex_unlock(&entry->mutex);
     
-    close(client_fd);
+    close_connection(client_fd);
     free(arg);
     return NULL;
 }
@@ -367,7 +374,7 @@ int main(int argc, char** argv) {
 
         int *arg = malloc(sizeof(int));
         if (!arg) {
-            close(client_fd);
+            close_connection(client_fd);
             continue;
         }
         *arg = client_fd;
@@ -381,7 +388,7 @@ int main(int argc, char** argv) {
             perror("Ошибка pthread_create. Лимит потоков исчерпан.");
             const char *err_msg = "HTTP/1.0 503 Service Unavailable\r\n\r\n";
             send(client_fd, err_msg, strlen(err_msg), 0);
-            close(client_fd);
+            close_connection(client_fd);
             free(arg);
         }
         pthread_attr_destroy(&attr);
@@ -390,7 +397,7 @@ int main(int argc, char** argv) {
     if (target_addrinfo) {
         freeaddrinfo(target_addrinfo);
     }
-    close(listen_fd);
+    close_connection(listen_fd);
     cache_free_all();
 
     return 0;
