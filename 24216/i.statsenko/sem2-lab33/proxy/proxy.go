@@ -1,50 +1,70 @@
 package proxy
 
 import (
-	"fmt"
-	"net"
+	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 type Proxy struct {
-	ln      *net.TCPListener
-	workers []*Worker
-	next    int
+	listenFd int
+	workers  []*Worker
+	next     int
 }
 
 func NewProxy(port, numWorkers int) (*Proxy, error) {
-	ln, err := net.Listen("tcp4", fmt.Sprintf(":%d", port))
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_STREAM, 0)
 	if err != nil {
 		return nil, err
 	}
-	tcpLn := ln.(*net.TCPListener)
+	if err := unix.SetsockoptInt(fd, unix.SOL_SOCKET, unix.SO_REUSEADDR, 1); err != nil {
+		unix.Close(fd)
+		return nil, err
+	}
+	addr := &unix.SockaddrInet4{Port: port}
+	if err := unix.Bind(fd, addr); err != nil {
+		unix.Close(fd)
+		return nil, err
+	}
+	if err := syscall.Listen(fd, 128); err != nil {
+		unix.Close(fd)
+		return nil, err
+	}
 
 	cache := NewCache()
 	workers := make([]*Worker, numWorkers)
 	for i := range workers {
 		w, err := newWorker(cache)
 		if err != nil {
-			tcpLn.Close()
+			unix.Shutdown(fd, unix.SHUT_RDWR)
+			unix.Close(fd)
 			return nil, err
 		}
 		workers[i] = w
 	}
 
-	return &Proxy{ln: tcpLn, workers: workers}, nil
+	return &Proxy{listenFd: fd, workers: workers}, nil
 }
 
 func (p *Proxy) Run() error {
-	defer p.ln.Close()
+	defer func() {
+		unix.Shutdown(p.listenFd, unix.SHUT_RDWR)
+		unix.Close(p.listenFd)
+	}()
 
 	for _, w := range p.workers {
 		go w.run()
 	}
 
 	for {
-		conn, err := p.ln.AcceptTCP()
+		fd, _, err := unix.Accept(p.listenFd)
 		if err != nil {
+			if err == unix.EINTR {
+				continue
+			}
 			return err
 		}
-		p.workers[p.next].assign(conn)
+		p.workers[p.next].assign(fd)
 		p.next = (p.next + 1) % len(p.workers)
 	}
 }

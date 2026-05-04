@@ -15,6 +15,7 @@ type connState int
 const (
 	stateReading connState = iota
 	stateConnecting
+	stateRequesting
 	stateForwarding
 	stateSending
 )
@@ -35,32 +36,26 @@ func (s *fdSet) isSet(fd int) bool {
 	return s.Bits[fd/64]&(1<<(uint(fd)%64)) != 0
 }
 
-func (s *fdSet) setMax(fd int, maxFd *int) {
-	s.set(fd)
-	if fd > *maxFd {
-		*maxFd = fd
-	}
-}
-
 type workerConn struct {
-	clientFd   int
-	clientConn *net.TCPConn
-	originFd   int
-	state      connState
-	reqBuf     []byte
-	respBuf    []byte
-	sendOff    int
-	cacheKey   string
-	host       string
-	path       string
-	originDone bool
+	clientFd     int
+	originFd     int
+	state        connState
+	reqBuf       []byte
+	originReq    []byte
+	originReqOff int
+	respBuf      []byte
+	sendOff      int
+	cacheKey     string
+	host         string
+	path         string
+	originDone   bool
 }
 
 func (c *workerConn) close() {
-	if c.clientConn != nil {
-		c.clientConn.Close()
+	if c.clientFd >= 0 {
+		unix.Shutdown(c.clientFd, unix.SHUT_RDWR)
+		unix.Close(c.clientFd)
 		c.clientFd = -1
-		c.clientConn = nil
 	}
 	if c.originFd >= 0 {
 		unix.Shutdown(c.originFd, unix.SHUT_RDWR)
@@ -100,15 +95,8 @@ func newWorker(cache *Cache) (*Worker, error) {
 	}, nil
 }
 
-func (w *Worker) assign(conn *net.TCPConn) {
-	raw, err := conn.SyscallConn()
-	if err != nil {
-		conn.Close()
-		return
-	}
-	var fd int
-	raw.Control(func(f uintptr) { fd = int(f) })
-	c := &workerConn{clientFd: fd, clientConn: conn, originFd: -1, state: stateReading}
+func (w *Worker) assign(clientFd int) {
+	c := &workerConn{clientFd: clientFd, originFd: -1, state: stateReading}
 	w.mu.Lock()
 	w.queue = append(w.queue, c)
 	w.mu.Unlock()
@@ -117,35 +105,48 @@ func (w *Worker) assign(conn *net.TCPConn) {
 
 func (w *Worker) run() {
 	for {
-		var rset, wset fdSet
-		rset.zero()
-		wset.zero()
-		maxFd := w.pipeR
-		rset.set(w.pipeR)
+		fds := make([]unix.PollFd, 0, 1+len(w.conns)*2)
+		fds = append(fds, unix.PollFd{Fd: int32(w.pipeR), Events: unix.POLLIN})
 
 		for _, c := range w.conns {
 			switch c.state {
 			case stateReading:
-				rset.setMax(c.clientFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLIN})
 			case stateConnecting:
-				wset.setMax(c.originFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLOUT})
+			case stateRequesting:
+				fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLOUT})
 			case stateForwarding:
 				if !c.originDone {
-					rset.setMax(c.originFd, &maxFd)
+					fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLIN})
 				}
 				if c.sendOff < len(c.respBuf) {
-					wset.setMax(c.clientFd, &maxFd)
+					fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLOUT})
 				}
 			case stateSending:
-				wset.setMax(c.clientFd, &maxFd)
+				fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLOUT})
 			}
 		}
 
-		if _, err := unix.Select(maxFd+1, &rset.FdSet, &wset.FdSet, nil, nil); err != nil {
+		if _, err := unix.Poll(fds, -1); err != nil {
 			if err == unix.EINTR {
 				continue
 			}
 			return
+		}
+
+		var rset, wset fdSet
+		rset.zero()
+		wset.zero()
+		errMask := int16(unix.POLLHUP | unix.POLLERR | unix.POLLNVAL)
+		for _, pfd := range fds {
+			fd := int(pfd.Fd)
+			if pfd.Revents&(unix.POLLIN|errMask) != 0 {
+				rset.set(fd)
+			}
+			if pfd.Revents&(unix.POLLOUT|errMask) != 0 {
+				wset.set(fd)
+			}
 		}
 
 		if rset.isSet(w.pipeR) {
@@ -177,6 +178,8 @@ func (w *Worker) handle(c *workerConn, rset, wset *fdSet) bool {
 		return w.handleReading(c, rset)
 	case stateConnecting:
 		return w.handleConnecting(c, wset)
+	case stateRequesting:
+		return w.handleRequesting(c, wset)
 	case stateForwarding:
 		return w.handleForwarding(c, rset, wset)
 	case stateSending:
@@ -200,9 +203,6 @@ func (w *Worker) handleReading(c *workerConn, rset *fdSet) bool {
 			}
 		}
 	}
-	if err == unix.EAGAIN {
-		return false
-	}
 	if err != nil || n == 0 {
 		c.close()
 		return true
@@ -219,12 +219,26 @@ func (w *Worker) handleConnecting(c *workerConn, wset *fdSet) bool {
 		c.close()
 		return true
 	}
-	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", c.path, c.host)
-	if _, err := unix.Write(c.originFd, []byte(req)); err != nil {
+	c.state = stateRequesting
+	return false
+}
+
+func (w *Worker) handleRequesting(c *workerConn, wset *fdSet) bool {
+	if !wset.isSet(c.originFd) {
+		return false
+	}
+	n, err := unix.Write(c.originFd, c.originReq[c.originReqOff:])
+	if n > 0 {
+		c.originReqOff += n
+	}
+	if err != nil {
 		c.close()
 		return true
 	}
-	c.state = stateForwarding
+	if c.originReqOff >= len(c.originReq) {
+		c.originReq = nil
+		c.state = stateForwarding
+	}
 	return false
 }
 
@@ -240,7 +254,9 @@ func (w *Worker) handleForwarding(c *workerConn, rset, wset *fdSet) bool {
 			unix.Close(c.originFd)
 			c.originFd = -1
 			c.originDone = true
-			w.cache.Set(c.cacheKey, c.respBuf)
+			if err == nil {
+				w.cache.Set(c.cacheKey, c.respBuf)
+			}
 		}
 	}
 	if wset.isSet(c.clientFd) && c.sendOff < len(c.respBuf) {
@@ -248,7 +264,7 @@ func (w *Worker) handleForwarding(c *workerConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.sendOff += n
 		}
-		if err != nil && err != unix.EAGAIN {
+		if err != nil {
 			c.close()
 			return true
 		}
@@ -272,11 +288,7 @@ func (w *Worker) handleSending(c *workerConn, wset *fdSet) bool {
 	if n > 0 {
 		c.sendOff += n
 	}
-	if err != nil && err != unix.EAGAIN {
-		c.close()
-		return true
-	}
-	if c.sendOff >= len(c.respBuf) {
+	if err != nil || c.sendOff >= len(c.respBuf) {
 		c.close()
 		return true
 	}
@@ -323,15 +335,10 @@ func (w *Worker) startRequest(c *workerConn, headers string) error {
 	}
 
 	c.originFd = fd
+	c.originReq = []byte(fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host))
+	c.originReqOff = 0
 	if err == nil {
-		req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host)
-		if _, err := unix.Write(fd, []byte(req)); err != nil {
-			unix.Shutdown(fd, unix.SHUT_RDWR)
-			unix.Close(fd)
-			c.originFd = -1
-			return err
-		}
-		c.state = stateForwarding
+		c.state = stateRequesting
 	} else {
 		c.state = stateConnecting
 	}
