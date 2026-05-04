@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
     char *endptr;
     long thread_count = strtol(argv[1], &endptr, 10);
-    if (*endptr != '\0' || thread_count <= 0) {
+    if (*endptr != '\0' || thread_count <= 0 || thread_count <= 0) {
         fprintf(stderr, "Number of threads must be a positive integer.\n");
         exit(EXIT_FAILURE);
     }
