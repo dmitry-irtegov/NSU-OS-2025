@@ -13,6 +13,9 @@
 
 #define BUF_SIZE 8192
 #define MAX_SESSIONS 510
+#define MAX_URI_LEN 2048
+#define MAX_METHOD_LEN 16
+#define MAX_VERSION_LEN 16
 #define STATE_READ_REQUEST  1
 #define STATE_CACHE_LOOKUP  2
 #define STATE_FETCH_SERVER  3
@@ -39,7 +42,7 @@ typedef struct {
     int request_len;
     int request_sent;
     char request_buf[BUF_SIZE];
-    char uri[2048];
+    char uri[MAX_URI_LEN];
     CacheEntry *cache_entry;
     size_t cache_offset;
     int pfd_client_idx;
@@ -71,7 +74,7 @@ CacheEntry* cache_add_entry(const char *uri) {
         return NULL;
     }
 
-    new_entry->capacity = 8192;
+    new_entry->capacity = BUF_SIZE;
     new_entry->data = (char *)malloc(new_entry->capacity);
     if (!new_entry->data) {
         free(new_entry->uri);
@@ -109,7 +112,9 @@ int cache_append_data(CacheEntry *entry, const char *new_data, size_t len) {
 }
 
 void cache_release_entry(CacheEntry *entry) {
-    if (!entry) return;
+    if (!entry) {
+        return;
+    }
     entry->reference_count--;
 }
 
@@ -136,7 +141,9 @@ void sig_handler(int signum) {
 
 void set_nonblock(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) return;
+    if (flags == -1) {
+        return;
+    }
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
@@ -167,8 +174,8 @@ int parse_http_request(Session *s) {
         return 0;
     }
 
-    char method[16];
-    char version[16];
+    char method[MAX_METHOD_LEN];
+    char version[MAX_VERSION_LEN];
 
     int matched = sscanf(s->request_buf, "%15s %2047s %15s", method, s->uri, version);
 
@@ -391,7 +398,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
         case STATE_FETCH_SERVER: {
             if (server_idx >= 0 && (pfds[server_idx].revents & POLLIN)) {
-                char temp_buf[8192];
+                char temp_buf[BUF_SIZE];
                 int bytes_read = recv(s->fd_server, temp_buf, sizeof(temp_buf), 0);
 
                 if (bytes_read > 0) {
