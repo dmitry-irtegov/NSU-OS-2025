@@ -15,6 +15,7 @@ type connState int
 const (
 	stateReading connState = iota
 	stateConnecting
+	stateRequesting
 	stateForwarding
 	stateSending
 )
@@ -36,16 +37,18 @@ func (s *fdSet) isSet(fd int) bool {
 }
 
 type proxyConn struct {
-	clientFd   int
-	originFd   int
-	state      connState
-	reqBuf     []byte
-	respBuf    []byte
-	sendOff    int
-	cacheKey   string
-	host       string
-	path       string
-	originDone bool
+	clientFd     int
+	originFd     int
+	state        connState
+	reqBuf       []byte
+	originReq    []byte
+	originReqOff int
+	respBuf      []byte
+	sendOff      int
+	cacheKey     string
+	host         string
+	path         string
+	originDone   bool
 }
 
 func (c *proxyConn) close() {
@@ -117,6 +120,8 @@ func (p *Proxy) Run() error {
 				fds = append(fds, unix.PollFd{Fd: int32(c.clientFd), Events: unix.POLLIN})
 			case stateConnecting:
 				fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLOUT})
+			case stateRequesting:
+				fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLOUT})
 			case stateForwarding:
 				if !c.originDone {
 					fds = append(fds, unix.PollFd{Fd: int32(c.originFd), Events: unix.POLLIN})
@@ -180,6 +185,8 @@ func (p *Proxy) handle(c *proxyConn, rset, wset *fdSet) bool {
 		return p.handleReading(c, rset)
 	case stateConnecting:
 		return p.handleConnecting(c, wset)
+	case stateRequesting:
+		return p.handleRequesting(c, wset)
 	case stateForwarding:
 		return p.handleForwarding(c, rset, wset)
 	case stateSending:
@@ -219,12 +226,26 @@ func (p *Proxy) handleConnecting(c *proxyConn, wset *fdSet) bool {
 		c.close()
 		return true
 	}
-	req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", c.path, c.host)
-	if _, err := unix.Write(c.originFd, []byte(req)); err != nil {
+	c.state = stateRequesting
+	return false
+}
+
+func (p *Proxy) handleRequesting(c *proxyConn, wset *fdSet) bool {
+	if !wset.isSet(c.originFd) {
+		return false
+	}
+	n, err := unix.Write(c.originFd, c.originReq[c.originReqOff:])
+	if n > 0 {
+		c.originReqOff += n
+	}
+	if err != nil {
 		c.close()
 		return true
 	}
-	c.state = stateForwarding
+	if c.originReqOff >= len(c.originReq) {
+		c.originReq = nil
+		c.state = stateForwarding
+	}
 	return false
 }
 
@@ -321,15 +342,10 @@ func (p *Proxy) startRequest(c *proxyConn, headers string) error {
 	}
 
 	c.originFd = fd
+	c.originReq = []byte(fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host))
+	c.originReqOff = 0
 	if err == nil {
-		req := fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host)
-		if _, err := unix.Write(fd, []byte(req)); err != nil {
-			unix.Shutdown(fd, unix.SHUT_RDWR)
-			unix.Close(fd)
-			c.originFd = -1
-			return err
-		}
-		c.state = stateForwarding
+		c.state = stateRequesting
 	} else {
 		c.state = stateConnecting
 	}
