@@ -1,7 +1,7 @@
 package controller
 
 import (
-	"sem2-lab18/list"
+	"sem2-lab20/list"
 	"sync"
 	"time"
 )
