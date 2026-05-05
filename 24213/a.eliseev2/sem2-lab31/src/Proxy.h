@@ -24,6 +24,7 @@ class Proxy : private ConnectionManager {
 
   private:
     struct ConnectionInfo {
+        size_t pollfdIndex;
         std::shared_ptr<Connection> connection;
         int fd;
         bool isConnected;
@@ -43,8 +44,8 @@ class Proxy : private ConnectionManager {
 
     ResponseCache cache;
     std::vector<pollfd> pollFds;
-    std::vector<ConnectionInfo> connections;
-    std::unordered_map<int, size_t> fdIndexMap;
+    std::vector<pollfd> eventQueue;
+    std::unordered_map<int, ConnectionInfo> connections;
 
     std::string defaultHost;
     uint16_t defaultPort;

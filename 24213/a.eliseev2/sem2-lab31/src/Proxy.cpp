@@ -3,7 +3,9 @@
 #include "ErrorResponse.h"
 #include "Http.h"
 #include "MessageBuffer.h"
+#include <algorithm>
 #include <arpa/inet.h>
+#include <cassert>
 #include <iostream>
 #include <netdb.h>
 #include <poll.h>
@@ -55,10 +57,9 @@ Proxy::Proxy(uint16_t listenPort, std::string defaultHost, uint16_t defaultPort)
         .fd = sockFd,
         .events = POLLIN,
     });
-    connections.push_back({});
 }
 
-static sockaddr resolveAddress(const char *hostname, uint16_t port,
+static sockaddr resolveAddress(const char *hostname, in_port_t port,
                                socklen_t *addrLen) {
     std::string strPort = std::to_string(port);
 
@@ -66,6 +67,7 @@ static sockaddr resolveAddress(const char *hostname, uint16_t port,
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
 
+    std::cerr << "Making DNS request: " << hostname << std::endl;
     int gaiError = ::getaddrinfo(hostname, strPort.c_str(), &hints, &result);
     if (gaiError) {
         throw std::runtime_error("Could not resolve address");
@@ -73,6 +75,16 @@ static sockaddr resolveAddress(const char *hostname, uint16_t port,
 
     sockaddr addr = *result->ai_addr;
     *addrLen = result->ai_addrlen;
+    assert(addr.sa_family == AF_INET && "Resolved non-IPv4 address");
+
+    sockaddr_in &ipAddr = reinterpret_cast<sockaddr_in &>(addr);
+    char ipString[INET_ADDRSTRLEN];
+    if (!::inet_ntop(AF_INET, &ipAddr.sin_addr, ipString, sizeof(ipString))) {
+        throw std::system_error(errno, std::generic_category(),
+                                "Could not parse IPv4 address");
+    }
+    std::cerr << "Resolved address: " << ipString << std::endl;
+
     ::freeaddrinfo(result);
     return addr;
 }
@@ -123,26 +135,26 @@ Proxy::makeRequest(const http::RequestLine &line,
     auto serverConnection =
         std::make_shared<ServerConnection>(serverFd, line, request, response);
 
-    connections.push_back({
+    connections[serverFd] = {
+        .pollfdIndex = pollFds.size(),
         .connection = serverConnection,
         .fd = serverFd,
         .isConnected = !pending,
-    });
+    };
     pollFds.push_back({
         .fd = serverFd,
         .events = static_cast<short>(pending ? POLLOUT : POLLRDNORM | POLLOUT),
     });
-    fdIndexMap[serverFd] = pollFds.size() - 1;
 
     return response;
 }
 
 void Proxy::notifyWrite(int fd) {
-    auto it = fdIndexMap.find(fd);
-    if (it == fdIndexMap.end()) {
+    auto it = connections.find(fd);
+    if (it == connections.end()) {
         return;
     }
-    pollFds[it->second].events |= POLLOUT;
+    pollFds[it->second.pollfdIndex].events |= POLLOUT;
 }
 
 void Proxy::acceptNewConnections() {
@@ -158,30 +170,33 @@ void Proxy::acceptNewConnections() {
         }
         auto clientConnection = std::make_shared<ClientConnection>(clientFd);
 
-        connections.push_back({
+        connections[clientFd] = {
+            .pollfdIndex = pollFds.size(),
             .connection = clientConnection,
             .fd = clientFd,
             .isConnected = true,
-        });
+        };
         pollFds.push_back({
             .fd = clientFd,
             .events = POLLRDNORM,
         });
-        fdIndexMap[clientFd] = pollFds.size() - 1;
     }
 }
 
 void Proxy::disconnect(ConnectionInfo &connection) {
     int fd = connection.fd;
-    size_t index = fdIndexMap[fd];
-    connections.erase(connections.begin() + index);
+    size_t index = connection.pollfdIndex;
+    connections.erase(fd);
     pollFds.erase(pollFds.begin() + index);
-    fdIndexMap.erase(fd);
-    for (auto &entry : fdIndexMap) {
-        if (entry.second > index) {
-            entry.second--;
+    for (auto &conn : connections) {
+        if (conn.second.pollfdIndex > index) {
+            conn.second.pollfdIndex--;
         }
     }
+    eventQueue.erase(
+        std::remove_if(eventQueue.begin(), eventQueue.end(),
+                       [fd](pollfd pollfd) { return pollfd.fd == fd; }),
+        eventQueue.end());
     ::close(fd);
 }
 
@@ -197,8 +212,7 @@ void Proxy::servicePending(ConnectionInfo &connection, SocketEvents events) {
         serviceConnected(connection, SocketEvents::Error);
     } else {
         connection.isConnected = true;
-        size_t index = fdIndexMap[connection.fd];
-        pollFds[index].events = POLLRDNORM | POLLOUT;
+        pollFds[connection.pollfdIndex].events = POLLRDNORM | POLLOUT;
     }
 }
 
@@ -214,42 +228,46 @@ void Proxy::serviceConnected(ConnectionInfo &connection, SocketEvents events) {
     if ((result & ServiceResult::Disconnect) != ServiceResult::None) {
         disconnect(connection);
     } else {
-        size_t index = fdIndexMap[connection.fd];
-        pollFds[index].events |=
+        pollFds[connection.pollfdIndex].events |=
             static_cast<decltype(pollfd::events)>(result) >> 1;
     }
 }
 
 void Proxy::service() {
-    acceptNewConnections();
+    auto eventIter = eventQueue.begin();
+    if (eventIter != eventQueue.end()) {
+        auto connIter = connections.find(eventIter->fd);
+        assert(connIter != connections.end() &&
+               "Stale event for closed connection");
+        ConnectionInfo connection = connIter->second;
+        connIter->second.isConnected = true;
 
-    SocketEvents events;
-    ConnectionInfo *connection = nullptr;
-    for (size_t i = 1; i < pollFds.size(); i++) {
-        pollfd &pollFd = pollFds[i];
-        ConnectionInfo &conn = connections[i];
-        if (pollFd.revents) {
-            events = static_cast<SocketEvents>(pollFd.revents);
-            pollFd.events = 0;
-            pollFd.revents = 0;
-            connection = &conn;
-            break;
-        }
-    }
+        SocketEvents socketEvents =
+            static_cast<SocketEvents>(eventIter->revents);
+        eventQueue.erase(eventIter);
 
-    if (!connection) {
-        if (::poll(pollFds.data(), pollFds.size(), -1) == -1) {
-            throw std::system_error(errno, std::generic_category(),
-                                    "Poll failed");
+        if (connection.isConnected) {
+            serviceConnected(connection, socketEvents);
+        } else {
+            servicePending(connection, socketEvents);
         }
         return;
     }
 
-    if (connection->isConnected) {
-        serviceConnected(*connection, events);
-    } else {
-        servicePending(*connection, events);
+    if (::poll(pollFds.data(), pollFds.size(), -1) == -1) {
+        throw std::system_error(errno, std::generic_category(), "Poll failed");
     }
+    for (size_t i = 1; i < pollFds.size(); i++) {
+        pollfd &pollFd = pollFds[i];
+        assert(!(pollFd.events & POLLNVAL) && "Pollfds got messed up");
+        if (pollFd.revents) {
+            eventQueue.push_back(pollFd);
+            pollFd.events = 0;
+            pollFd.revents = 0;
+        }
+    }
+
+    acceptNewConnections();
 }
 
 } // namespace proxy
