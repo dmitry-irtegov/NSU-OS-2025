@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sem2-lab18/list"
+	"sem2-lab19/list"
 	"sync"
 )
 
