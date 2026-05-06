@@ -29,6 +29,8 @@ typedef struct session {
     char buf_out[MAXLINE];
     int buf_out_size;
     int buf_out_sent;
+    int sock_in_eof;
+    int sock_out_eof;
 } session;
 
 void signal_handler(int signum) {
@@ -66,14 +68,14 @@ void update_events(session *s) {
     fds[s->fd_in_index].events = 0;
     fds[s->fd_out_index].events = 0;
 
-    if (s->buf_in_size < MAXLINE) {
+    if (s->buf_in_size < MAXLINE && !s->sock_in_eof) {
         fds[s->fd_in_index].events |= POLLIN;
     }
     if (s->buf_out_size > 0) {
         fds[s->fd_in_index].events |= POLLOUT;
     }
 
-    if (s->buf_out_size < MAXLINE) {
+    if (s->buf_out_size < MAXLINE && !s->sock_out_eof) {
         fds[s->fd_out_index].events |= POLLIN;
     }
     if (s->buf_in_size > 0) {
@@ -96,6 +98,8 @@ void clear_connection(session *sessions, int session_id) {
     sessions[session_id].buf_in_sent = 0;
     sessions[session_id].buf_out_size = 0;
     sessions[session_id].buf_out_sent = 0;
+    sessions[session_id].sock_in_eof = 0;
+    sessions[session_id].sock_out_eof = 0;
 }
 
 int get_listen_fd(int port) {
@@ -248,6 +252,8 @@ int create_connection(session *sessions, char *address_out, int port_out, int li
     sessions[session_id].buf_in_sent = 0;
     sessions[session_id].buf_out_size = 0;
     sessions[session_id].buf_out_sent = 0;
+    sessions[session_id].sock_in_eof = 0;
+    sessions[session_id].sock_out_eof = 0;
 
     fds[fd_in_index].fd = client_fd;
     fds[fd_out_index].fd = out_fd;
@@ -285,9 +291,28 @@ int event_data(session *sessions, int index) {
     }
 
     bytes_read = recv(current_fd, buf + *buf_size, MAXLINE - *buf_size, 0);
-    if (bytes_read <= 0) {
+    if (bytes_read < 0) {
         clear_connection(sessions, session_id);
         return -1;
+    }
+    if (bytes_read == 0) {
+        if (current_fd == sessions[session_id].sock_in) {
+            sessions[session_id].sock_in_eof = 1;
+            if (sessions[session_id].buf_in_size == 0)
+                shutdown(sessions[session_id].sock_out, SHUT_WR);
+        } else {
+            sessions[session_id].sock_out_eof = 1;
+            if (sessions[session_id].buf_out_size == 0)
+                shutdown(sessions[session_id].sock_in, SHUT_WR);
+        }
+        if (sessions[session_id].sock_in_eof && sessions[session_id].sock_out_eof
+            && sessions[session_id].buf_in_size == 0
+            && sessions[session_id].buf_out_size == 0) {
+            clear_connection(sessions, session_id);
+            return -1;
+        }
+        update_events(&sessions[session_id]);
+        return 0;
     }
 
     *buf_size += bytes_read;
@@ -329,6 +354,24 @@ int event_send(session *sessions, int index) {
 
     *buf_sent += bytes_sent;
     normalize_buffer(buf, buf_size, buf_sent);
+
+    if (current_fd == sessions[session_id].sock_out
+        && sessions[session_id].sock_in_eof
+        && sessions[session_id].buf_in_size == 0)
+        shutdown(sessions[session_id].sock_out, SHUT_WR);
+
+    if (current_fd == sessions[session_id].sock_in
+        && sessions[session_id].sock_out_eof
+        && sessions[session_id].buf_out_size == 0)
+        shutdown(sessions[session_id].sock_in, SHUT_WR);
+
+    if (sessions[session_id].sock_in_eof && sessions[session_id].sock_out_eof
+        && sessions[session_id].buf_in_size == 0
+        && sessions[session_id].buf_out_size == 0) {
+        clear_connection(sessions, session_id);
+        return -1;
+    }
+
     update_events(&sessions[session_id]);
     return 0;
 }
@@ -347,6 +390,7 @@ int main(int argc, char *argv[]) {
     }
 
     signal(SIGINT, signal_handler);
+    signal(SIGPIPE, SIG_IGN);
 
     sessions = malloc(sizeof(session) * MAX_CONNECTIONS);
     if (sessions == NULL) {
@@ -362,6 +406,8 @@ int main(int argc, char *argv[]) {
         sessions[i].buf_in_sent = 0;
         sessions[i].buf_out_size = 0;
         sessions[i].buf_out_sent = 0;
+        sessions[i].sock_in_eof = 0;
+        sessions[i].sock_out_eof = 0;
     }
 
     for (i = 0; i < MAX_FDS; i++) {
