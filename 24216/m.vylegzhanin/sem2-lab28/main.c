@@ -16,11 +16,18 @@ void reset_terminal_mode() {
 }
 
 void set_conio_terminal_mode() {
-    tcgetattr(STDIN_FILENO, &orig_termios);
+    if (tcgetattr(STDIN_FILENO, &orig_termios) != 0) {
+        perror("tcgetattr");
+        return;
+    }
     atexit(reset_terminal_mode);
     struct termios new_termios = orig_termios;
     new_termios.c_lflag &= ~(ICANON | ECHO);
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_termios);
+    new_termios.c_cc[VMIN]  = 1;
+    new_termios.c_cc[VTIME] = 0;
+    if (tcsetattr(STDIN_FILENO, TCSANOW, &new_termios) != 0) {
+        perror("tcsetattr");
+    }
 }
 
 void parse_url(const char *url, char **host, char **port, char **path) {
