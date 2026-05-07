@@ -43,13 +43,13 @@ static void *compute_partial_sum(void *arg)
             *partial -= 1.0 / (4.0 * i + 3.0);
         }
 
-        if (stop_requested) {
-            int rc = pthread_barrier_wait(&barrier);
-            if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
-                free(partial);
-                pthread_exit(NULL);
-            }
+        int rc = pthread_barrier_wait(&barrier);
+        if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
+            free(partial);
+            pthread_exit(NULL);
+        }
 
+        if (stop_requested) {
             pthread_exit(partial);
         }
     }
