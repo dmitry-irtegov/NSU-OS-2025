@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -9,7 +10,10 @@
 #define CHECK_INTERVAL 1000000L
 
 static volatile sig_atomic_t stop_requested = 0;
+
 static pthread_barrier_t barrier;
+
+static int finish_requested = 0;
 
 typedef struct {
     long thread_id;
@@ -49,7 +53,19 @@ static void *compute_partial_sum(void *arg)
             pthread_exit(NULL);
         }
 
-        if (stop_requested) {
+        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
+            if (stop_requested) {
+                finish_requested = 1;
+            }
+        }
+
+        rc = pthread_barrier_wait(&barrier);
+        if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
+            free(partial);
+            pthread_exit(NULL);
+        }
+
+        if (finish_requested) {
             pthread_exit(partial);
         }
     }
@@ -91,8 +107,9 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (pthread_barrier_init(&barrier, NULL, (unsigned)num_threads) != 0) {
-        fprintf(stderr, "pthread_barrier_init failed\n");
+    int ret = pthread_barrier_init(&barrier, NULL, (unsigned)num_threads);
+    if (ret != 0) {
+        fprintf(stderr, "pthread_barrier_init failed: %s\n", strerror(ret));
         free(threads);
         free(thread_data);
         return EXIT_FAILURE;
@@ -102,7 +119,7 @@ int main(int argc, char **argv)
         thread_data[i].thread_id = i;
         thread_data[i].num_threads = num_threads;
 
-        int ret = pthread_create(&threads[i], NULL, compute_partial_sum, &thread_data[i]);
+        ret = pthread_create(&threads[i], NULL, compute_partial_sum, &thread_data[i]);
         if (ret != 0) {
             fprintf(stderr, "pthread_create failed: %s\n", strerror(ret));
             exit(EXIT_FAILURE);
@@ -116,7 +133,8 @@ int main(int argc, char **argv)
 
     for (long i = 0; i < num_threads; i++) {
         void *retval = NULL;
-        int ret = pthread_join(threads[i], &retval);
+
+        ret = pthread_join(threads[i], &retval);
         if (ret != 0) {
             fprintf(stderr, "pthread_join failed: %s\n", strerror(ret));
             pthread_barrier_destroy(&barrier);
@@ -146,5 +164,5 @@ int main(int argc, char **argv)
     free(threads);
     free(thread_data);
 
-    return 0;
+    return EXIT_SUCCESS;
 }
