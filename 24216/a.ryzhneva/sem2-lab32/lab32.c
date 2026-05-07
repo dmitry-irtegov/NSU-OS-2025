@@ -59,6 +59,126 @@ CacheEntry* cache_lookup(const char *uri) {
     return NULL;
 }
 
+CacheEntry* cache_add_entry(const char *uri) {
+    CacheEntry *new_entry = (CacheEntry *)malloc(sizeof(CacheEntry));
+    if (!new_entry) {
+        return NULL;
+    }
+
+    new_entry->uri = strdup(uri);
+    if (!new_entry->uri) {
+        free(new_entry);
+        return NULL;
+    }
+
+    new_entry->capacity = BUF_SIZE;
+    new_entry->data = (char *)malloc(new_entry->capacity);
+    if (!new_entry->data) {
+        free(new_entry->uri);
+        free(new_entry);
+        return NULL;
+    }
+
+    new_entry->size = 0;
+    new_entry->is_complete = 0;
+    new_entry->reference_count = 1;
+
+    pthread_mutex_init(&new_entry->mutex, NULL);
+    pthread_cond_init(&new_entry->cond, NULL);
+
+    new_entry->next = cache_head;
+    cache_head = new_entry;
+
+    return new_entry;
+}
+
+int cache_append_data(CacheEntry *entry, const char *new_data, size_t len) {
+    if (entry->size + len > entry->capacity) {
+        size_t new_capacity = entry->capacity * 2;
+        while (entry->size + len > new_capacity) {
+            new_capacity *= 2;
+        }
+        char *temp = (char *)realloc(entry->data, new_capacity);
+        if (!temp) {
+            return -1;
+        }
+        entry->data = temp;
+        entry->capacity = new_capacity;
+    }
+
+    memcpy(entry->data + entry->size, new_data, len);
+    entry->size += len;
+    return 0;
+}
+
+void cache_release_entry(CacheEntry *entry) {
+    if (!entry) {
+        return;
+    }
+    pthread_mutex_lock(&entry->mutex);
+    entry->reference_count--;
+    pthread_mutex_unlock(&entry->mutex);
+}
+
+void cache_free_all() {
+    pthread_mutex_lock(&cache_list_mutex);
+    CacheEntry *curr = cache_head;
+    while (curr != NULL) {
+        CacheEntry *next = curr->next;
+        free(curr->uri);
+        free(curr->data);
+        pthread_mutex_destroy(&curr->mutex);
+        pthread_cond_destroy(&curr->cond);
+        free(curr);
+        curr = next;
+    }
+    cache_head = NULL;
+    pthread_mutex_unlock(&cache_list_mutex);
+    pthread_mutex_destroy(&cache_list_mutex);
+}
+
+int parse_request(int client_fd, char *req_buf, size_t req_buf_size, int *req_len,
+                  char *method, size_t method_len, char *uri, size_t uri_len,
+                  char *version, size_t version_len) {
+    *req_len = 0;
+
+    while (1) {
+        int bytes_read = recv(client_fd, req_buf + *req_len, req_buf_size - 1 - *req_len, 0);
+        if (bytes_read < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        } else if (bytes_read == 0) {
+            return -1;
+        }
+
+        *req_len += bytes_read;
+        req_buf[*req_len] = '\0';
+
+        if (strstr(req_buf, "\r\n\r\n") != NULL) {
+            break;
+        }
+
+        if (*req_len >= (int)req_buf_size - 1) {
+            return -1;
+        }
+    }
+
+    if (sscanf(req_buf, "%15s %2047s %15s", method, uri, version) != 3) {
+        return -1;
+    }
+
+    if (strncmp(method, "GET", 3) != 0) {
+        return -1;
+    }
+
+    (void)method_len;
+    (void)uri_len;
+    (void)version_len;
+    return 0;
+}
+
 void resolve_target(const char *target_host, const char *target_port) {
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
@@ -119,42 +239,15 @@ void* handle_client(void* arg) {
     int client_fd = *((int*)arg);
     
     char req_buf[BUF_SIZE];
-    int req_len = 0;
+    int  req_len = 0;
     char method[MAX_METHOD_LEN];
     char uri[MAX_URI_LEN];
     char version[MAX_VERSION_LEN];
     
 
-    while (1) {
-        int bytes_read = recv(client_fd, req_buf + req_len, BUF_SIZE - 1 - req_len, 0);
-        if (bytes_read < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        } else if (bytes_read == 0) {
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-        
-        req_len += bytes_read;
-        req_buf[req_len] = '\0';
-        
-        if (strstr(req_buf, "\r\n\r\n") != NULL) {
-            break;
-        }
-        
-        if (req_len >= BUF_SIZE - 1) {
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-    }
-
-    if (sscanf(req_buf, "%15s %2047s %15s", method, uri, version) != 3 || strncmp(method, "GET", 3) != 0) {
+    if (parse_request(client_fd, req_buf, sizeof(req_buf), &req_len,
+                      method, sizeof(method), uri, sizeof(uri),
+                      version, sizeof(version)) != 0) {
         close_connection(client_fd);
         free(arg);
         return NULL;
@@ -169,41 +262,13 @@ void* handle_client(void* arg) {
         entry->reference_count++;
         pthread_mutex_unlock(&entry->mutex);
     } else {
-        entry = (CacheEntry *)malloc(sizeof(CacheEntry));
+        entry = cache_add_entry(uri);
         if (!entry) {
             pthread_mutex_unlock(&cache_list_mutex);
             close_connection(client_fd);
             free(arg);
             return NULL;
         }
-
-        entry->uri = strdup(uri);
-        entry->capacity = BUF_SIZE;
-        entry->size = 0;
-        entry->data = (char *)malloc(entry->capacity);
-
-        if (!entry->uri || !entry->data) {
-            if (entry->uri) {
-                free(entry->uri);
-            }
-            if (entry->data) {
-                free(entry->data);
-            }
-            free(entry);
-            pthread_mutex_unlock(&cache_list_mutex);
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-
-        entry->is_complete = 0;
-        entry->reference_count = 1;
-        
-        pthread_mutex_init(&entry->mutex, NULL);
-        pthread_cond_init(&entry->cond, NULL);
-        
-        entry->next = cache_head;
-        cache_head = entry;
         is_writer = 1;
     }
     pthread_mutex_unlock(&cache_list_mutex);
@@ -235,25 +300,8 @@ void* handle_client(void* arg) {
                 
                 pthread_mutex_lock(&entry->mutex);
                 
-                int oom_error = 0;
-                if (entry->size + bytes_recv > entry->capacity) {
-                    size_t new_cap = entry->capacity * 2;
-                    while (entry->size + bytes_recv > new_cap) {
-                        new_cap *= 2;
-                    }
-
-                    char *new_data = (char *)realloc(entry->data, new_cap);
-                    if (new_data) {
-                        entry->data = new_data;
-                        entry->capacity = new_cap;
-                    } else {
-                        oom_error = 1;
-                    }
-                }
-                
+                int oom_error = (cache_append_data(entry, temp_buf, bytes_recv) != 0);
                 if (!oom_error) {
-                    memcpy(entry->data + entry->size, temp_buf, bytes_recv);
-                    entry->size += bytes_recv;
                     pthread_cond_broadcast(&entry->cond);
                 }
                 
@@ -318,30 +366,11 @@ void* handle_client(void* arg) {
         }
     }
 
-    pthread_mutex_lock(&entry->mutex);
-    entry->reference_count--;
-    pthread_mutex_unlock(&entry->mutex);
+    cache_release_entry(entry);
     
     close_connection(client_fd);
     free(arg);
     return NULL;
-}
-
-void cache_free_all() {
-    pthread_mutex_lock(&cache_list_mutex);
-    CacheEntry *curr = cache_head;
-    while (curr != NULL) {
-        CacheEntry *next = curr->next;
-        free(curr->uri);
-        free(curr->data);
-        pthread_mutex_destroy(&curr->mutex);
-        pthread_cond_destroy(&curr->cond);
-        free(curr);
-        curr = next;
-    }
-    cache_head = NULL;
-    pthread_mutex_unlock(&cache_list_mutex);
-    pthread_mutex_destroy(&cache_list_mutex);
 }
 
 int main(int argc, char** argv) {
