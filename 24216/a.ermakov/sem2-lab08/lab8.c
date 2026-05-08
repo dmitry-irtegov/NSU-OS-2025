@@ -45,9 +45,6 @@ int main(int argc, char** argv) {
         thread_data[i].num_threads = num_threads;
         if (pthread_create(&threads[i], NULL, calculate_pi_part, &thread_data[i]) != 0) {
             fprintf(stderr, "Ошибка: не удалось создать поток %d\n", i);
-            for (int j = 0; j < i; j++) {
-                pthread_cancel(threads[j]);
-            }
             return 1;
         }
     }
