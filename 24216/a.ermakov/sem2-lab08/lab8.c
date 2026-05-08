@@ -30,7 +30,13 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    int num_threads = atoi(argv[1]);
+    char *endptr;
+    long num_threads_long = strtol(argv[1], &endptr, 10);
+    if (*endptr != '\0' || num_threads_long <= 0) {
+        fprintf(stderr, "Ошибка: некорректное количество потоков. Введите положительное целое число (1-10000).\n");
+        return 1;
+    }
+    int num_threads = (int)num_threads_long;
     pthread_t threads[num_threads];
     thread_data_t thread_data[num_threads];
 
