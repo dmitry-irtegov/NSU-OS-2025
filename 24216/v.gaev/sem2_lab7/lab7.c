@@ -58,7 +58,7 @@ void* copy_file_thread(void *arg) {
     char buffer[COPY_BUFFER_SIZE];
     struct stat st;
 
-    if (stat(args->src_path, &st) == -1) {
+    if (lstat(args->src_path, &st) == -1) {
         fprintf(stderr, "Ошибка stat для файла %s: %s\n", args->src_path, strerror(errno));
     } else {
         fd_in = safe_open(args->src_path, O_RDONLY, 0);
@@ -112,7 +112,7 @@ void* copy_dir_thread(void *arg) {
     struct stat st;
     thread_node_t *threads = NULL;
 
-    if (stat(args->src_path, &st) == -1) {
+    if (lstat(args->src_path, &st) == -1) {
         fprintf(stderr, "Ошибка stat для каталога %s: %s\n", args->src_path, strerror(errno));
     } else if (mkdir(args->dst_path, st.st_mode & 0777) == -1 && errno != EEXIST) {
         fprintf(stderr, "Ошибка создания каталога %s: %s\n", args->dst_path, strerror(errno));
@@ -146,8 +146,8 @@ void* copy_dir_thread(void *arg) {
                     snprintf(new_dst, dst_len, "%s/%s", args->dst_path, result->d_name);
 
                     struct stat child_st;
-                    if (stat(new_src, &child_st) == -1) {
-                        fprintf(stderr, "Ошибка stat %s: %s\n", new_src, strerror(errno));
+                    if (lstat(new_src, &child_st) == -1) {
+                        fprintf(stderr, "Ошибка lstat %s: %s\n", new_src, strerror(errno));
                         free(new_src);
                         free(new_dst);
                         continue;
@@ -160,7 +160,12 @@ void* copy_dir_thread(void *arg) {
                     pthread_t tid;
                     int create_err = 0;
 
-                    if (S_ISDIR(child_st.st_mode)) {
+                    if (S_ISLNK(child_st.st_mode)) {
+                        free(new_src);
+                        free(new_dst);
+                        free(child_args);
+                        continue;
+                    } else if (S_ISDIR(child_st.st_mode)) {
                         create_err = pthread_create(&tid, NULL, copy_dir_thread, child_args);
                     } else if (S_ISREG(child_st.st_mode)) {
                         create_err = pthread_create(&tid, NULL, copy_file_thread, child_args);
