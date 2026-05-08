@@ -1,66 +1,89 @@
+#include <pthread.h>
+#include <sched.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <pthread.h>
+#include <string.h>
 
-#ifndef NUM_STEPS
-#define NUM_STEPS 1000000000
-#endif
+pthread_mutex_t mx_first;
+pthread_mutex_t mx_second;
+pthread_mutex_t mx_third;
 
-typedef struct {
-    int thread_id;
-    int num_threads;
-} thread_data_t;
+atomic_int child_is_ready = 0;
 
-void* calculate_pi_part(void* arg) {
-    thread_data_t* data = (thread_data_t*)arg;
-    double* partial_sum = malloc(sizeof(double));
-    *partial_sum = 0.0;
-
-    for (int i = data->thread_id; i < NUM_STEPS; i += data->num_threads) {
-        *partial_sum += 1.0 / (i * 4.0 + 1.0);
-        *partial_sum -= 1.0 / (i * 4.0 + 3.0);
+pthread_mutex_t* mutex_by_slot(int slot) {
+    switch (slot % 3) {
+        case 0:
+            return &mx_first;
+        case 1:
+            return &mx_second;
+        default:
+            return &mx_third;
     }
-
-    pthread_exit(partial_sum);
 }
 
-int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "%s <количество_потоков>\n", argv[0]);
+void print_sequence(const char* title, int lock_shift, int unlock_shift) {
+    for (int line = 1; line <= 10; line++) {
+        int step = line - 1;
+        pthread_mutex_lock(mutex_by_slot(step + lock_shift));
+
+        fprintf(stderr, "%s %d\n", title, line);
+
+        pthread_mutex_unlock(mutex_by_slot(step + unlock_shift));
+    }
+
+    pthread_mutex_unlock(mutex_by_slot(9 + lock_shift));
+}
+
+void* child_worker(void* arg) {
+    pthread_mutex_lock(&mx_third);
+
+    atomic_store(&child_is_ready, 1);
+
+    print_sequence((const char*)arg, 0, 2);
+
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+
+    if (pthread_mutex_init(&mx_first, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации первого мьютекса\n");
+        return 1;
+    }
+    if (pthread_mutex_init(&mx_second, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации второго мьютекса\n");
+        return 1;
+    }
+    if (pthread_mutex_init(&mx_third, &attr) != 0) {
+        fprintf(stderr, "Ошибка инициализации третьего мьютекса\n");
         return 1;
     }
 
-    char *endptr;
-    long num_threads_long = strtol(argv[1], &endptr, 10);
-    if (*endptr != '\0' || num_threads_long <= 0) {
-        fprintf(stderr, "Ошибка: некорректное количество потоков. Введите положительное целое число (1-10000).\n");
+    pthread_mutexattr_destroy(&attr);
+    pthread_mutex_lock(&mx_first);
+
+    pthread_t thread;
+    int error = pthread_create(&thread, NULL, child_worker, "Дочерняя нить:");
+    if (error != 0) {
+        fprintf(stderr, "Ошибка создания потока: %s\n", strerror(error));
         return 1;
     }
-    int num_threads = (int)num_threads_long;
-    pthread_t threads[num_threads];
-    thread_data_t thread_data[num_threads];
 
-    for (int i = 0; i < num_threads; i++) {
-        thread_data[i].thread_id = i;
-        thread_data[i].num_threads = num_threads;
-        if (pthread_create(&threads[i], NULL, calculate_pi_part, &thread_data[i]) != 0) {
-            fprintf(stderr, "Ошибка: не удалось создать поток %d\n", i);
-            for (int j = 0; j < i; j++) {
-                pthread_cancel(threads[j]);
-            }
-            return 1;
-        }
+    while (!atomic_load(&child_is_ready)) {
+        sched_yield();
     }
 
-    double total_pi = 0.0;
-    for (int i = 0; i < num_threads; i++) {
-        double* part;
-        pthread_join(threads[i], (void**)&part);
-        total_pi += *part;
-        free(part);
-    }
+    print_sequence("Родительская нить:", 1, 0);
 
-    printf("pi done - %.15g\n", total_pi * 4.0);
+    pthread_join(thread, NULL);
+
+    pthread_mutex_destroy(&mx_first);
+    pthread_mutex_destroy(&mx_second);
+    pthread_mutex_destroy(&mx_third);
 
     return 0;
 }
