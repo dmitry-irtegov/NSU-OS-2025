@@ -210,6 +210,9 @@ func (p *Proxy) handleReading(c *proxyConn, rset *fdSet) bool {
 			}
 		}
 	}
+	if err == unix.EINTR {
+		return false
+	}
 	if err != nil || n == 0 {
 		c.close()
 		return true
@@ -226,6 +229,10 @@ func (p *Proxy) handleConnecting(c *proxyConn, wset *fdSet) bool {
 		c.close()
 		return true
 	}
+	if err := unix.SetNonblock(c.originFd, false); err != nil {
+		c.close()
+		return true
+	}
 	c.state = stateRequesting
 	return false
 }
@@ -237,6 +244,9 @@ func (p *Proxy) handleRequesting(c *proxyConn, wset *fdSet) bool {
 	n, err := unix.Write(c.originFd, c.originReq[c.originReqOff:])
 	if n > 0 {
 		c.originReqOff += n
+	}
+	if err == unix.EINTR {
+		return false
 	}
 	if err != nil {
 		c.close()
@@ -256,7 +266,8 @@ func (p *Proxy) handleForwarding(c *proxyConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.respBuf = append(c.respBuf, buf[:n]...)
 		}
-		if err != nil || n == 0 {
+		if err == unix.EINTR {
+		} else if err != nil || n == 0 {
 			unix.Shutdown(c.originFd, unix.SHUT_RDWR)
 			unix.Close(c.originFd)
 			c.originFd = -1
@@ -271,7 +282,7 @@ func (p *Proxy) handleForwarding(c *proxyConn, rset, wset *fdSet) bool {
 		if n > 0 {
 			c.sendOff += n
 		}
-		if err != nil {
+		if err != nil && err != unix.EINTR {
 			c.close()
 			return true
 		}
@@ -294,6 +305,9 @@ func (p *Proxy) handleSending(c *proxyConn, wset *fdSet) bool {
 	n, err := unix.Write(c.clientFd, c.respBuf[c.sendOff:])
 	if n > 0 {
 		c.sendOff += n
+	}
+	if err == unix.EINTR {
+		return false
 	}
 	if err != nil || c.sendOff >= len(c.respBuf) {
 		c.close()
@@ -345,6 +359,12 @@ func (p *Proxy) startRequest(c *proxyConn, headers string) error {
 	c.originReq = []byte(fmt.Sprintf("GET %s HTTP/1.0\r\nHost: %s\r\n\r\n", path, host))
 	c.originReqOff = 0
 	if err == nil {
+		if err := unix.SetNonblock(fd, false); err != nil {
+			unix.Shutdown(fd, unix.SHUT_RDWR)
+			unix.Close(fd)
+			c.originFd = -1
+			return err
+		}
 		c.state = stateRequesting
 	} else {
 		c.state = stateConnecting
