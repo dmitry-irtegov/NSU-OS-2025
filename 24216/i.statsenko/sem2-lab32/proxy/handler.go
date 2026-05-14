@@ -55,6 +55,9 @@ func (p *Proxy) handleConn(clientFd int) {
 				return
 			}
 		}
+		if err == unix.EINTR {
+			continue
+		}
 		if err != nil {
 			return
 		}
@@ -76,6 +79,9 @@ func (p *Proxy) readUntilDoubleCRLF(fd int) ([]byte, error) {
 			if p.findDoubleCRLF(buf) >= 0 {
 				return buf, nil
 			}
+		}
+		if err == unix.EINTR {
+			continue
 		}
 		if err != nil || n == 0 {
 			return nil, fmt.Errorf("connection closed before complete request")
@@ -106,6 +112,9 @@ func (p *Proxy) writeAll(fd int, data []byte) error {
 	for len(data) > 0 {
 		n, err := unix.Write(fd, data)
 		if err != nil {
+			if err == unix.EINTR {
+				continue
+			}
 			return err
 		}
 		data = data[n:]
