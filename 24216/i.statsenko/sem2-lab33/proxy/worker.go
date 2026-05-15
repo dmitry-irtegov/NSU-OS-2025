@@ -260,7 +260,6 @@ func (w *Worker) handleForwarding(c *workerConn, rset, wset *fdSet) bool {
 			c.respBuf = append(c.respBuf, buf[:n]...)
 		}
 		if err == unix.EINTR {
-			// retry next poll iteration
 		} else if err != nil || n == 0 {
 			unix.Shutdown(c.originFd, unix.SHUT_RDWR)
 			unix.Close(c.originFd)
