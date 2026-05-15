@@ -154,6 +154,11 @@ int parse_request(connection_t *c) {
         return -1;
     }
 
+    if (strcmp(version, "HTTP/1.0") != 0) {
+        fprintf(stderr, "Unsupported HTTP version: %s\n", version);
+        return -1;
+    }
+
     if (parse_target_from_uri(uri, c->host, sizeof(c->host), &c->port) != 1) {
         fprintf(stderr, "Error: request URI must be absolute (http://host[:port]/path)\n");
         return -1;
@@ -186,7 +191,7 @@ int start_connect(connection_t* c) {
     for (struct addrinfo *rp = res; rp != NULL; rp = rp->ai_next) {
         sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (sfd == -1)
-            continue;
+            break;
 
         if (set_nonblocking(sfd) == -1) {
             close(sfd);
@@ -260,11 +265,6 @@ int create_listen_socket(int port) {
 
     if (listen(lfd, 64) == -1) {
         perror("Error listen");
-        close(lfd);
-        return -1;
-    }
-
-    if (set_nonblocking(lfd) == -1) {
         close(lfd);
         return -1;
     }
@@ -363,9 +363,7 @@ int main(int argc, char *argv[]) {
             socklen_t clen = sizeof(caddr);
             int cfd = accept(lfd, (struct sockaddr *)&caddr, &clen);
             if (cfd == -1) {
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    perror("Error accept");
-                }
+                perror("Error accept");
             } else if (g_nconns >= MAX_CLIENTS) {
                 fprintf(stderr, "Error: too many clients, dropping connection\n");
                 shutdown(cfd, SHUT_RDWR);
@@ -434,7 +432,6 @@ int main(int argc, char *argv[]) {
                     continue;
                 }
 
-                c->from_cache = 0;
                 if (start_connect(c) == -1) {
                     close_connection(i);
                     i--;
