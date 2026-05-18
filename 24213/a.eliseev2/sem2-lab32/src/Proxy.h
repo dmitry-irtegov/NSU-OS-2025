@@ -17,11 +17,14 @@ class Proxy : private ConnectionManager {
     struct ConnectionInfo {
         std::shared_ptr<Connection> connection;
         pollfd pollFd;
-        bool writeNotified;
     };
     struct ThreadParams {
         ConnectionInfo connectionInfo;
         Proxy &proxy;
+    };
+    struct ThreadInfo {
+        pthread_t thread;
+        bool writeNotified;
     };
 
     Proxy(uint16_t listenPort, std::string defaultHost, uint16_t defaultPort);
@@ -49,7 +52,7 @@ class Proxy : private ConnectionManager {
 
     int listenFd;
     ResponseCache cache;
-    std::unordered_map<int, pthread_t> threads;
+    std::unordered_map<int, ThreadInfo> threads;
     pthread_mutex_t lock;
 };
 

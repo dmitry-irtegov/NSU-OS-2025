@@ -23,23 +23,7 @@ namespace proxy {
 
 constexpr int CONN_QUEUE_SIZE = 10;
 
-static pthread_key_t flagKey;
-static pthread_once_t flagOnce = PTHREAD_ONCE_INIT;
-extern "C" void initFlagKey() {
-    ::pthread_key_create(&flagKey, nullptr);
-}
-static void setFlagPointer(bool *ptr) {
-    ::pthread_once(&flagOnce, initFlagKey);
-    ::pthread_setspecific(flagKey, ptr);
-}
-static bool *getFlagPointer() {
-    ::pthread_once(&flagOnce, initFlagKey);
-    return static_cast<bool *>(::pthread_getspecific(flagKey));
-}
 extern "C" void onSignal(int sig) {
-    if (bool *flag = getFlagPointer()) {
-        *flag = true;
-    }
 }
 
 extern "C" void *threadRun(void *argument) {
@@ -48,8 +32,6 @@ extern "C" void *threadRun(void *argument) {
             static_cast<Proxy::ThreadParams *>(argument);
         std::cerr << "Starting thread: " << params->connectionInfo.pollFd.fd
                   << std::endl;
-
-        setFlagPointer(&params->connectionInfo.writeNotified);
 
         while (params->proxy.service(params->connectionInfo)) {
         }
@@ -201,7 +183,10 @@ Proxy::makeRequest(const http::RequestLine &line,
     }
 
     ::pthread_mutex_lock(&lock);
-    threads[serverFd] = thread;
+    threads[serverFd] = {
+        .thread = thread,
+        .writeNotified = false,
+    };
     ::pthread_mutex_unlock(&lock);
 
     return response;
@@ -211,7 +196,9 @@ void Proxy::notifyWrite(int fd) {
     ::pthread_mutex_lock(&lock);
     auto it = threads.find(fd);
     if (it != threads.end()) {
-        if (int error = ::pthread_kill(it->second, SIGUSR1)) {
+        it->second.writeNotified = true;
+        if (int error = ::pthread_kill(it->second.thread, SIGUSR1)) {
+            ::pthread_mutex_unlock(&lock);
             throw std::system_error(error, std::generic_category(),
                                     "Could not kill thread");
         }
@@ -230,21 +217,25 @@ void Proxy::disconnect(ConnectionInfo &connection) {
 }
 
 bool Proxy::service(ConnectionInfo &connection) {
-    if (connection.writeNotified) {
-        connection.writeNotified = false;
+    ::pthread_mutex_lock(&lock);
+    auto it = threads.find(connection.pollFd.fd);
+    if (it != threads.end() && it->second.writeNotified) {
+        it->second.writeNotified = false;
         connection.pollFd.events |= POLLOUT;
     }
+    ::pthread_mutex_unlock(&lock);
 
     sigset_t sigmask;
     ::pthread_sigmask(0, nullptr, &sigmask);
     ::sigdelset(&sigmask, SIGUSR1);
 
-    if (::ppoll(&connection.pollFd, 1, 0, &sigmask) == -1) {
+    if (::ppoll(&connection.pollFd, 1, nullptr, &sigmask) == -1) {
         if (errno != EINTR) {
             throw std::system_error(errno, std::generic_category(),
                                     "Poll failed");
         }
     }
+
     SocketEvents events = static_cast<SocketEvents>(connection.pollFd.revents);
     connection.pollFd.revents = 0;
     connection.pollFd.events = 0;
@@ -301,7 +292,10 @@ void Proxy::acceptNewConnection() {
     }
 
     ::pthread_mutex_lock(&lock);
-    threads[clientFd] = thread;
+    threads[clientFd] = {
+        .thread = thread,
+        .writeNotified = false,
+    };
     ::pthread_mutex_unlock(&lock);
 }
 
