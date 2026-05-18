@@ -81,9 +81,12 @@ void signal_handler()
 
 int main(int argc, char **argv)
 {
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s <url>\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
     char path[512] = {0};
     char host[512] = {0};
-    int sockfd;
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
     {
@@ -132,7 +135,6 @@ int main(int argc, char **argv)
     fd_set read_fds;
     int max_fd;
     int printing = 1;
-    int full_buffer = 0;
     int bytes_to_print = 0;
     int rest_bytes = BUF_SIZ;
     int write_shift = 0;
