@@ -46,7 +46,7 @@ class Proxy : private ConnectionManager {
 
     int connect(const char *hostname, uint16_t port, bool &pending);
     void disconnect(ConnectionInfo &connection);
-    
+
     std::string defaultHost;
     uint16_t defaultPort;
 
@@ -54,6 +54,8 @@ class Proxy : private ConnectionManager {
     ResponseCache cache;
     std::unordered_map<int, ThreadInfo> threads;
     pthread_mutex_t lock;
+
+    pthread_attr_t thread_attr;
 };
 
 } // namespace proxy

@@ -54,6 +54,9 @@ extern "C" void *threadRun(void *argument) {
 Proxy::Proxy(uint16_t listenPort, std::string defaultHost, uint16_t defaultPort)
     : defaultHost(defaultHost), defaultPort(defaultPort),
       lock(PTHREAD_MUTEX_INITIALIZER) {
+    ::pthread_attr_init(&thread_attr);
+    ::pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED);
+
     sigset_t sigmask;
     ::sigemptyset(&sigmask);
     ::sigaddset(&sigmask, SIGUSR1);
@@ -173,7 +176,7 @@ Proxy::makeRequest(const http::RequestLine &line,
     };
     pthread_t thread;
 
-    if (int error = ::pthread_create(&thread, nullptr, threadRun, params)) {
+    if (int error = ::pthread_create(&thread, &thread_attr, threadRun, params)) {
         std::cerr << "Could not create server thread: "
                   << std::error_code(error, std::generic_category()).message()
                   << std::endl;
@@ -283,7 +286,7 @@ void Proxy::acceptNewConnection() {
     };
     pthread_t thread;
 
-    if (int error = ::pthread_create(&thread, nullptr, threadRun, params)) {
+    if (int error = ::pthread_create(&thread, &thread_attr, threadRun, params)) {
         std::cerr << "Could not create server thread: "
                   << std::error_code(error, std::generic_category()).message()
                   << std::endl;
