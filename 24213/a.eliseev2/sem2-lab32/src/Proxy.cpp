@@ -97,6 +97,7 @@ Proxy::Proxy(uint16_t listenPort, std::string defaultHost, uint16_t defaultPort)
         }
     } catch (std::runtime_error &re) {
         ::close(listenFd);
+        throw;
     }
 }
 
