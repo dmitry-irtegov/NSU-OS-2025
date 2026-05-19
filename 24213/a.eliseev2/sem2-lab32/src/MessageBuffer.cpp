@@ -1,0 +1,131 @@
+#include "MessageBuffer.h"
+#include <cassert>
+#include <cstring>
+#include <pthread.h>
+
+namespace proxy {
+
+MessageBuffer::MessageBuffer()
+    : data(), isEnd(false), readableSize(0), lock(PTHREAD_MUTEX_INITIALIZER) {
+}
+
+MessageBuffer::~MessageBuffer() {
+    pthread_mutex_destroy(&lock);
+}
+
+MessageBuffer::Reader MessageBuffer::read(size_t &position) {
+    return Reader(*this, position);
+}
+
+MessageBuffer::Writer MessageBuffer::write() {
+    return Writer(*this);
+}
+
+void MessageBuffer::subscribe(int fd) {
+    pthread_mutex_lock(&lock);
+    subscribers.insert(fd);
+    pthread_mutex_unlock(&lock);
+}
+
+void MessageBuffer::unsubscribe(int fd) {
+    pthread_mutex_lock(&lock);
+    subscribers.erase(fd);
+    pthread_mutex_unlock(&lock);
+}
+
+void MessageBuffer::end(MessageNotifier &notifier) {
+    pthread_mutex_lock(&lock);
+    isEnd = true;
+    for (int fd : subscribers) {
+        notifier.notifyWrite(fd);
+    }
+    pthread_mutex_unlock(&lock);
+}
+
+MessageBuffer::Reader::Reader(MessageBuffer &buffer, size_t &position)
+    : buffer(&buffer), position(&position) {
+    pthread_mutex_lock(&buffer.lock);
+}
+
+MessageBuffer::Reader::~Reader() {
+    pthread_mutex_unlock(&buffer->lock);
+}
+
+const char *MessageBuffer::Reader::data() {
+    return buffer->data.data() + *position;
+}
+
+size_t MessageBuffer::Reader::length() {
+    return buffer->readableSize - *position;
+}
+
+bool MessageBuffer::Reader::isEnd() {
+    return (buffer->readableSize - *position) == 0 && buffer->isEnd;
+}
+
+void MessageBuffer::Reader::advance(size_t size) {
+    *position = std::min(buffer->readableSize, *position + size);
+}
+
+MessageBuffer::Writer::Writer(MessageBuffer &buffer)
+    : buffer(&buffer), allocSize(0) {
+    pthread_mutex_lock(&buffer.lock);
+}
+
+MessageBuffer::Writer::~Writer() {
+    pthread_mutex_unlock(&buffer->lock);
+}
+
+std::vector<char> &MessageBuffer::Writer::data() {
+    return buffer->data;
+}
+
+char *MessageBuffer::Writer::allocate(size_t size) {
+    size_t oldSize = buffer->data.size() - allocSize;
+    buffer->data.resize(oldSize + size);
+    allocSize = size;
+    return buffer->data.data() + oldSize;
+}
+
+void MessageBuffer::Writer::written(size_t size) {
+    buffer->data.resize(buffer->data.size() - allocSize + size);
+    allocSize = 0;
+}
+
+void MessageBuffer::Writer::appendRange(const char *data, size_t size) {
+    assert(allocSize == 0 && "Write already in progress");
+    std::vector<char> &bufData = buffer->data;
+    bufData.reserve(bufData.size() + size);
+    bufData.insert(bufData.end(), data, data + size);
+}
+
+void MessageBuffer::Writer::insertRange(const char *data, size_t size,
+                                        size_t at) {
+    assert(allocSize == 0 && "Write already in progress");
+    std::vector<char> &bufData = buffer->data;
+    bufData.reserve(bufData.size() + size);
+    bufData.insert(bufData.begin() + at, data, data + size);
+}
+
+void MessageBuffer::Writer::removeRange(size_t at, size_t size) {
+    assert(allocSize == 0 && "Write already in progress");
+    std::vector<char> &data = buffer->data;
+    data.erase(data.begin() + at, data.begin() + at + size);
+}
+
+void MessageBuffer::Writer::end() {
+    buffer->isEnd = true;
+}
+
+void MessageBuffer::Writer::commit(MessageNotifier &notifier) {
+    buffer->readableSize = buffer->data.size() - allocSize;
+    for (int fd : buffer->subscribers) {
+        notifier.notifyWrite(fd);
+    }
+}
+
+void MessageBuffer::Writer::reserve(size_t size) {
+    buffer->data.reserve(size);
+}
+
+} // namespace proxy
