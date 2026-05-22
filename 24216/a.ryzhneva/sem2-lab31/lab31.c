@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <poll.h>
 #include <netdb.h>
+#include <strings.h>
 #include <errno.h>
 
 #define BUF_SIZE 8192
@@ -29,7 +30,8 @@ typedef struct CacheEntry {
     char *data;
     size_t size;
     size_t capacity;
-    int is_complete;    
+    int is_complete;
+    int is_failed;    
     int reference_count;
     struct CacheEntry *next;
 } CacheEntry;
@@ -85,6 +87,7 @@ CacheEntry* cache_add_entry(const char *uri) {
 
     new_entry->size = 0;
     new_entry->is_complete = 0;
+    new_entry->is_failed = 0;
     new_entry->reference_count = 1;
 
     new_entry->next = cache_head;
@@ -178,8 +181,10 @@ void close_session(Session *s) {
     s->active = 0;
 }
 
+
 int parse_http_request(Session *s) {
-    if (strstr(s->request_buf, "\r\n\r\n") == NULL) {
+    char *end_of_headers = strstr(s->request_buf, "\r\n\r\n");
+    if (end_of_headers == NULL) {
         return 0;
     }
 
@@ -196,6 +201,21 @@ int parse_http_request(Session *s) {
     if (strncmp(method, "GET", 3) != 0) {
         fprintf(stderr, "Unsupported HTTP method: %s\n", method);
         return -1;
+    }
+
+    char *version_ptr = strstr(s->request_buf, "HTTP/1.");
+    if (version_ptr && (version_ptr < end_of_headers)) {
+        strncpy(version_ptr, "HTTP/1.0", 8);
+    }
+
+    const char *conn_close = "\r\nConnection: close";
+    size_t conn_len = strlen(conn_close);
+    size_t headers_len = end_of_headers - s->request_buf;
+
+    if (headers_len + conn_len + 4 < BUF_SIZE) {
+        memmove(end_of_headers + conn_len, end_of_headers, (s->request_len - headers_len) + 1);
+        memcpy(end_of_headers, conn_close, conn_len);
+        s->request_len += conn_len;
     }
 
     return 1;
@@ -289,6 +309,112 @@ int parse_host_header(const char *request, char *host, size_t host_len, char *po
     return 0;
 }
 
+int replace_request_target(Session *s, const char *new_target) {
+    char *line_end = strstr(s->request_buf, "\r\n");
+    if (!line_end) {
+        return -1;
+    }
+
+    char *first_space = memchr(s->request_buf, ' ', (size_t)(line_end - s->request_buf));
+    if (!first_space) {
+        return -1;
+    }
+
+    char *second_space = memchr(first_space + 1, ' ', (size_t)(line_end - (first_space + 1)));
+    if (!second_space) {
+        return -1;
+    }
+
+    size_t old_len = (size_t)(second_space - (first_space + 1));
+    size_t new_len = strlen(new_target);
+    size_t new_total = (size_t)s->request_len - old_len + new_len;
+
+    if (new_total >= BUF_SIZE) {
+        return -1;
+    }
+
+    memmove(first_space + 1 + new_len, second_space,
+            (size_t)s->request_len - (size_t)(second_space - s->request_buf) + 1);
+    memcpy(first_space + 1, new_target, new_len);
+    s->request_len = (int)new_total;
+    return 0;
+}
+
+int set_host_header(Session *s, const char *host, const char *port) {
+    char host_value[300];
+    if (!host || !port) {
+        return -1;
+    }
+
+    if (strcmp(port, "80") == 0) {
+        if (snprintf(host_value, sizeof(host_value), "%s", host) >= (int)sizeof(host_value)) {
+            return -1;
+        }
+    } else {
+        if (snprintf(host_value, sizeof(host_value), "%s:%s", host, port) >= (int)sizeof(host_value)) {
+            return -1;
+        }
+    }
+
+    char *headers_end = strstr(s->request_buf, "\r\n\r\n");
+    if (!headers_end) {
+        return -1;
+    }
+
+    char *line = strstr(s->request_buf, "\r\n");
+    while (line && line < headers_end) {
+        line += 2;
+        if (line >= headers_end) {
+            break;
+        }
+
+        if (strncasecmp(line, "Host:", 5) == 0) {
+            char *value_start = line + 5;
+            while (*value_start == ' ' || *value_start == '\t') {
+                value_start++;
+            }
+            char *value_end = strstr(value_start, "\r\n");
+            if (!value_end) {
+                return -1;
+            }
+
+            size_t old_len = (size_t)(value_end - value_start);
+            size_t new_len = strlen(host_value);
+            size_t new_total = (size_t)s->request_len - old_len + new_len;
+            if (new_total >= BUF_SIZE) {
+                return -1;
+            }
+
+            memmove(value_start + new_len, value_end,
+                    (size_t)s->request_len - (size_t)(value_end - s->request_buf) + 1);
+            memcpy(value_start, host_value, new_len);
+            s->request_len = (int)new_total;
+            return 0;
+        }
+
+        line = strstr(line, "\r\n");
+    }
+
+    {
+        const char *prefix = "\r\nHost: ";
+        size_t prefix_len = strlen(prefix);
+        size_t value_len = strlen(host_value);
+        size_t insert_len = prefix_len + value_len;
+
+        if ((size_t)s->request_len + insert_len >= BUF_SIZE) {
+            return -1;
+        }
+
+        memmove(headers_end + insert_len, headers_end,
+                (size_t)s->request_len - (size_t)(headers_end - s->request_buf) + 1);
+        memcpy(headers_end, prefix, prefix_len);
+        memcpy(headers_end + prefix_len, host_value, value_len);
+        s->request_len += (int)insert_len;
+    }
+
+    return 0;
+}
+
 struct addrinfo *resolve_target(const char *target_host, const char *target_port) {
     struct addrinfo hints;
     struct addrinfo *result = NULL;
@@ -369,10 +495,8 @@ int build_poll_array(struct pollfd *pfds, int listen_fd) {
         if (s->state == STATE_READ_REQUEST) {
             pfds[client_idx].events |= POLLIN;
         } 
-        else if ((s->state == STATE_SERVE_CACHE || s->state == STATE_FETCH_SERVER) && s->cache_entry != NULL) {
-            if (s->cache_offset < s->cache_entry->size) {
-                pfds[client_idx].events |= POLLOUT;
-            }
+        else if (s->state == STATE_SERVE_CACHE || s->state == STATE_FETCH_SERVER) {
+            pfds[client_idx].events |= POLLOUT;
         }
 
         if ((s->state == STATE_FETCH_SERVER || s->state == STATE_SEND_REQUEST) && s->fd_server >= 0) {
@@ -403,47 +527,83 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
     int client_idx = s->pfd_client_idx;
     int server_idx = s->pfd_server_idx;
 
-    if ((client_idx >= 0 && (pfds[client_idx].revents & (POLLERR | POLLNVAL | POLLHUP))) || 
-        (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLNVAL | POLLHUP)))) {
+    if (s->state == STATE_FETCH_SERVER || s->state == STATE_SERVE_CACHE) {
+        if (s->cache_entry && s->cache_entry->is_failed) {
+            close_session(s);
+            return;
+        }   
+    }
+
+    if (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLNVAL | POLLHUP))) {
+        if (s->state == STATE_FETCH_SERVER && s->cache_entry) {
+            s->cache_entry->is_failed = 1;
+        }
         close_session(s);
         return;
+    }
+
+    if (s->state != STATE_READ_REQUEST) {
+        if (client_idx >= 0 && (pfds[client_idx].revents & (POLLERR | POLLNVAL | POLLHUP))) {
+            close_session(s);
+            return;
+        }
     }
 
     switch (s->state) {
         case STATE_READ_REQUEST:
             if (client_idx >= 0 && (pfds[client_idx].revents & POLLIN)) {
-
                 if (s->request_len >= BUF_SIZE - 1) {
                     close_session(s);
                     break;
                 }
 
-                int bytes_read = recv(s->fd_client, s->request_buf + s->request_len, BUF_SIZE - 1 - s->request_len, 0);
+                int bytes_read = recv(s->fd_client, s->request_buf + s->request_len, 
+                                     BUF_SIZE - 1 - s->request_len, 0);
 
                 if (bytes_read > 0) {
                     s->request_len += bytes_read;
                     s->request_buf[s->request_len] = '\0';
+
+                    if (strstr(s->request_buf, "\r\n\r\n") == NULL) {
+                        break;
+                    }
 
                     int parse_code = parse_http_request(s);
 
                     if (parse_code == 1) {
                         char target_host[256];
                         char target_port[16];
-                        int parsed = parse_target_from_uri(s->uri, target_host, sizeof(target_host), target_port, sizeof(target_port));
+                        int parsed = parse_target_from_uri(s->uri, target_host,
+                                                          sizeof(target_host), target_port,
+                                                          sizeof(target_port));
                         int uri_is_absolute = (parsed == 1);
+
                         if (parsed == -1) {
                             close_session(s);
                             break;
-                        } else if (parsed == 0) {
-                            parsed = parse_host_header(s->request_buf, target_host, sizeof(target_host), target_port, sizeof(target_port));
+                        }
+
+                        if (parsed == 0) {
+                            parsed = parse_host_header(s->request_buf, target_host,
+                                                       sizeof(target_host), target_port,
+                                                       sizeof(target_port));
                             if (parsed == -1) {
                                 close_session(s);
                                 break;
                             }
                         }
 
-                        const char *host_to_use = (parsed == 1) ? target_host : default_target_host;
-                        const char *port_to_use = (parsed == 1) ? target_port : default_target_port;
+                        const char *host_to_use;
+                        const char *port_to_use;
+
+                        if (parsed == 1) {
+                            host_to_use = target_host;
+                            port_to_use = target_port;
+                        } else {
+                            host_to_use = default_target_host;
+                            port_to_use = default_target_port;
+                        }
+
                         if (!host_to_use || !port_to_use) {
                             close_session(s);
                             break;
@@ -451,16 +611,35 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                         char cache_key[MAX_URI_LEN + 300];
                         if (uri_is_absolute) {
-                            if (snprintf(cache_key, sizeof(cache_key), "%s", s->uri) >= (int)sizeof(cache_key)) {
+                            if (snprintf(cache_key, sizeof(cache_key), "%s", s->uri) >= 
+                                (int)sizeof(cache_key)) {
                                 close_session(s);
                                 break;
                             }
                         } else {
                             const char *path_prefix = (s->uri[0] == '/') ? "" : "/";
-                            if (snprintf(cache_key, sizeof(cache_key), "http://%s:%s%s%s", host_to_use, port_to_use, path_prefix, s->uri) >= (int)sizeof(cache_key)) {
+                            if (snprintf(cache_key, sizeof(cache_key), 
+                                        "http://%s:%s%s%s", host_to_use, port_to_use, 
+                                        path_prefix, s->uri) >= (int)sizeof(cache_key)) {
                                 close_session(s);
                                 break;
                             }
+                        }
+
+                        if (uri_is_absolute) {
+                            const char *path_start = strchr(s->uri + strlen("http://"), '/');
+                            if (!path_start) {
+                                path_start = "/";
+                            }
+                            if (replace_request_target(s, path_start) < 0) {
+                                close_session(s);
+                                break;
+                            }
+                        }
+
+                        if (set_host_header(s, host_to_use, port_to_use) < 0) {
+                            close_session(s);
+                            break;
                         }
 
                         CacheEntry *found = cache_lookup(cache_key);
@@ -486,7 +665,9 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                             break;
                         }
 
-                        s->fd_server = socket(target_addrinfo->ai_family, target_addrinfo->ai_socktype, target_addrinfo->ai_protocol);
+                        s->fd_server = socket(target_addrinfo->ai_family, 
+                                             target_addrinfo->ai_socktype, 
+                                             target_addrinfo->ai_protocol);
                         if (s->fd_server < 0) {
                             freeaddrinfo(target_addrinfo);
                             close_session(s);
@@ -495,7 +676,8 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                         set_nonblock(s->fd_server);
 
-                        if (connect(s->fd_server, target_addrinfo->ai_addr, target_addrinfo->ai_addrlen) < 0) {
+                        if (connect(s->fd_server, target_addrinfo->ai_addr, 
+                                   target_addrinfo->ai_addrlen) < 0) {
                             if (errno != EINPROGRESS) {
                                 freeaddrinfo(target_addrinfo);
                                 close_session(s);
@@ -504,7 +686,6 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                             s->connect_pending = 1;
                         } else {
                             s->connect_pending = 0;
-                            set_blocking(s->fd_server);
                         }
 
                         freeaddrinfo(target_addrinfo);
@@ -517,12 +698,15 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                 } else if (bytes_read == 0) {
                     close_session(s);
                 } else {
-                    if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                    if (errno != EAGAIN && errno != EWOULDBLOCK) {
                         close_session(s);
                     }
                 }
+            } else if (client_idx >= 0 && (pfds[client_idx].revents & (POLLERR | POLLNVAL | POLLHUP))) {
+                close_session(s);
             }
             break;
+
         case STATE_SEND_REQUEST: {
             if (server_idx >= 0 && (pfds[server_idx].revents & POLLOUT)) {
                 if (s->connect_pending) {
@@ -532,7 +716,6 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                         close_session(s);
                         break;
                     }
-                    set_blocking(s->fd_server);
                     s->connect_pending = 0;
                 }
 
@@ -548,7 +731,6 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     }
                 } else if (sent < 0) {
                     if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                        perror("Ошибка отправки запроса серверу");
                         close_session(s);
                     }
                 }
@@ -563,22 +745,25 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                 if (bytes_read > 0) {
                     if (cache_append_data(s->cache_entry, temp_buf, bytes_read) < 0) {
+                        s->cache_entry->is_failed = 1;
                         close_session(s);
                         break;
                     }
                 } else if (bytes_read == 0) {
                     s->cache_entry->is_complete = 1;
-                    
                     close(s->fd_server);
                     s->fd_server = -1;
                     s->state = STATE_SERVE_CACHE;
                 } else {
                     if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+                        s->cache_entry->is_failed = 1;
                         close_session(s);
+                        break;
                     }
                 }
             }
-            if (client_idx >= 0 && (pfds[client_idx].revents & POLLOUT)) {
+
+            if (client_idx >= 0) {
                 size_t available_bytes = s->cache_entry->size - s->cache_offset;
                 
                 if (available_bytes > 0) {
@@ -597,11 +782,17 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     }
                 }
             }
+
             break;
         }
 
         case STATE_SERVE_CACHE: {
-            if (client_idx >= 0 && (pfds[client_idx].revents & POLLOUT)) {
+            if (s->cache_entry->is_failed) {
+                close_session(s);
+                break;
+            }
+
+            if (client_idx >= 0) {
                 size_t available_bytes = s->cache_entry->size - s->cache_offset;
                 
                 if (available_bytes > 0) {
@@ -628,7 +819,6 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         }
     }
 }
-
 void handle_new_connection(int listen_fd) {
     int new_client_fd = accept(listen_fd, NULL, NULL);
     if (new_client_fd < 0) {
