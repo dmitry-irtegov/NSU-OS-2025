@@ -573,7 +573,12 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     if (parse_code == 1) {
                         char target_host[256];
                         char target_port[16];
-                        int parsed = parse_target_from_uri(s->uri, target_host,
+                        const char *uri_to_parse = s->uri;
+                        if (s->uri[0] == '/' && strncmp(s->uri + 1, "http://", 7) == 0) {
+                            uri_to_parse = s->uri + 1;
+                        }
+
+                        int parsed = parse_target_from_uri(uri_to_parse, target_host,
                                                           sizeof(target_host), target_port,
                                                           sizeof(target_port));
                         int uri_is_absolute = (parsed == 1);
@@ -611,7 +616,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                         char cache_key[MAX_URI_LEN + 300];
                         if (uri_is_absolute) {
-                            if (snprintf(cache_key, sizeof(cache_key), "%s", s->uri) >= 
+                            if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= 
                                 (int)sizeof(cache_key)) {
                                 close_session(s);
                                 break;
@@ -627,7 +632,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                         }
 
                         if (uri_is_absolute) {
-                            const char *path_start = strchr(s->uri + strlen("http://"), '/');
+                            const char *path_start = strchr(uri_to_parse + strlen("http://"), '/');
                             if (!path_start) {
                                 path_start = "/";
                             }
