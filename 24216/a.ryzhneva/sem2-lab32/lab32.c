@@ -499,7 +499,11 @@ void* handle_client(void* arg) {
 
     char target_host[256];
     char target_port[16];
-    int parsed = parse_target_from_uri(uri, target_host, sizeof(target_host), target_port, sizeof(target_port));
+    const char *uri_to_parse = uri;
+    if (strncmp(uri, "/http://", 8) == 0) {
+        uri_to_parse = uri + 1;
+    }
+    int parsed = parse_target_from_uri(uri_to_parse, target_host, sizeof(target_host), target_port, sizeof(target_port));
     int uri_is_absolute = (parsed == 1);
     if (parsed == -1) {
         close_connection(client_fd);
@@ -523,7 +527,7 @@ void* handle_client(void* arg) {
     }
 
     if (uri_is_absolute) {
-        const char *path_start = strchr(uri + strlen("http://"), '/');
+        const char *path_start = strchr(uri_to_parse + strlen("http://"), '/');
         if (!path_start) {
             path_start = "/";
         }
@@ -548,7 +552,7 @@ void* handle_client(void* arg) {
 
     char cache_key[MAX_URI_LEN + 300];
     if (uri_is_absolute) {
-        if (snprintf(cache_key, sizeof(cache_key), "%s", uri) >= (int)sizeof(cache_key)) {
+        if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= (int)sizeof(cache_key)) {
             close_connection(client_fd);
             free(arg);
             return NULL;
