@@ -121,7 +121,7 @@ func makeListener(port int) (int, error) {
 	if err := unix.Bind(fd, &unix.SockaddrInet4{Port: port, Addr: [4]byte{0, 0, 0, 0}}); err != nil {
 		return -1, fmt.Errorf("bind failed")
 	}
-	if err := unix.Listen(fd, 16); err != nil {
+	if err := syscall.Listen(fd, 16); err != nil {
 		return -1, fmt.Errorf("listen failed")
 	}
 	return fd, err
