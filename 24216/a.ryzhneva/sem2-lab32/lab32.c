@@ -24,6 +24,7 @@ typedef struct CacheEntry {
     size_t size;
     size_t capacity;
     int is_complete;
+    int is_failed;
     int reference_count;
     
     pthread_mutex_t mutex;
@@ -83,6 +84,7 @@ CacheEntry* cache_add_entry(const char *uri) {
 
     new_entry->size = 0;
     new_entry->is_complete = 0;
+    new_entry->is_failed = 0;
     new_entry->reference_count = 1;
 
     pthread_mutex_init(&new_entry->mutex, NULL);
@@ -279,6 +281,146 @@ int parse_host_header(const char *request, char *host, size_t host_len, char *po
     return 0;
 }
 
+int replace_request_target(char *req_buf, int *req_len, size_t buf_size, const char *new_target) {
+    char *line_end = strstr(req_buf, "\r\n");
+    if (!line_end) {
+        return -1;
+    }
+
+    char *first_space = memchr(req_buf, ' ', (size_t)(line_end - req_buf));
+    if (!first_space) {
+        return -1;
+    }
+
+    char *second_space = memchr(first_space + 1, ' ', (size_t)(line_end - (first_space + 1)));
+    if (!second_space) {
+        return -1;
+    }
+
+    size_t old_len = (size_t)(second_space - (first_space + 1));
+    size_t new_len = strlen(new_target);
+    size_t new_total = (size_t)(*req_len) - old_len + new_len;
+
+    if (new_total >= buf_size) {
+        return -1;
+    }
+
+    memmove(first_space + 1 + new_len, second_space,
+            (size_t)(*req_len) - (size_t)(second_space - req_buf) + 1);
+    memcpy(first_space + 1, new_target, new_len);
+    *req_len = (int)new_total;
+    return 0;
+}
+
+int set_host_header(char *req_buf, int *req_len, size_t buf_size, const char *host, const char *port) {
+    char host_value[300];
+    if (!host || !port) {
+        return -1;
+    }
+
+    if (strcmp(port, "80") == 0) {
+        if (snprintf(host_value, sizeof(host_value), "%s", host) >= (int)sizeof(host_value)) {
+            return -1;
+        }
+    } else {
+        if (snprintf(host_value, sizeof(host_value), "%s:%s", host, port) >= (int)sizeof(host_value)) {
+            return -1;
+        }
+    }
+
+    char *headers_end = strstr(req_buf, "\r\n\r\n");
+    if (!headers_end) {
+        return -1;
+    }
+
+    char *line = strstr(req_buf, "\r\n");
+    while (line && line < headers_end) {
+        line += 2;
+        if (line >= headers_end) {
+            break;
+        }
+
+        if (strncasecmp(line, "Host:", 5) == 0) {
+            char *value_start = line + 5;
+            while (*value_start == ' ' || *value_start == '\t') {
+                value_start++;
+            }
+            char *value_end = strstr(value_start, "\r\n");
+            if (!value_end) {
+                return -1;
+            }
+
+            size_t old_len = (size_t)(value_end - value_start);
+            size_t new_len = strlen(host_value);
+            size_t new_total = (size_t)(*req_len) - old_len + new_len;
+            if (new_total >= buf_size) {
+                return -1;
+            }
+
+            memmove(value_start + new_len, value_end,
+                    (size_t)(*req_len) - (size_t)(value_end - req_buf) + 1);
+            memcpy(value_start, host_value, new_len);
+            *req_len = (int)new_total;
+            return 0;
+        }
+
+        line = strstr(line, "\r\n");
+    }
+
+    {
+        const char *prefix = "\r\nHost: ";
+        size_t prefix_len = strlen(prefix);
+        size_t value_len = strlen(host_value);
+        size_t insert_len = prefix_len + value_len;
+
+        if ((size_t)(*req_len) + insert_len >= buf_size) {
+            return -1;
+        }
+
+        memmove(headers_end + insert_len, headers_end,
+                (size_t)(*req_len) - (size_t)(headers_end - req_buf) + 1);
+        memcpy(headers_end, prefix, prefix_len);
+        memcpy(headers_end + prefix_len, host_value, value_len);
+        *req_len += (int)insert_len;
+    }
+
+    return 0;
+}
+
+int set_connection_close(char *req_buf, int *req_len, size_t buf_size) {
+    if (strstr(req_buf, "\r\nConnection:") || strstr(req_buf, "\r\nconnection:")) {
+        return 0;
+    }
+
+    char *headers_end = strstr(req_buf, "\r\n\r\n");
+    if (!headers_end) {
+        return -1;
+    }
+
+    const char *line = "\r\nConnection: close";
+    size_t line_len = strlen(line);
+    if ((size_t)(*req_len) + line_len >= buf_size) {
+        return -1;
+    }
+
+    memmove(headers_end + line_len, headers_end,
+            (size_t)(*req_len) - (size_t)(headers_end - req_buf) + 1);
+    memcpy(headers_end, line, line_len);
+    *req_len += (int)line_len;
+    return 0;
+}
+
+void mark_cache_failed(CacheEntry *entry) {
+    if (!entry) {
+        return;
+    }
+    pthread_mutex_lock(&entry->mutex);
+    entry->is_failed = 1;
+    entry->is_complete = 1;
+    pthread_cond_broadcast(&entry->cond);
+    pthread_mutex_unlock(&entry->mutex);
+}
+
 struct addrinfo *resolve_target(const char *target_host, const char *target_port) {
     struct addrinfo hints;
     struct addrinfo *result = NULL;
@@ -380,6 +522,30 @@ void* handle_client(void* arg) {
         return NULL;
     }
 
+    if (uri_is_absolute) {
+        const char *path_start = strchr(uri + strlen("http://"), '/');
+        if (!path_start) {
+            path_start = "/";
+        }
+        if (replace_request_target(req_buf, &req_len, sizeof(req_buf), path_start) < 0) {
+            close_connection(client_fd);
+            free(arg);
+            return NULL;
+        }
+    }
+
+    if (set_host_header(req_buf, &req_len, sizeof(req_buf), host_to_use, port_to_use) < 0) {
+        close_connection(client_fd);
+        free(arg);
+        return NULL;
+    }
+
+    if (set_connection_close(req_buf, &req_len, sizeof(req_buf)) < 0) {
+        close_connection(client_fd);
+        free(arg);
+        return NULL;
+    }
+
     char cache_key[MAX_URI_LEN + 300];
     if (uri_is_absolute) {
         if (snprintf(cache_key, sizeof(cache_key), "%s", uri) >= (int)sizeof(cache_key)) {
@@ -423,11 +589,18 @@ void* handle_client(void* arg) {
             server_fd = socket(target_addrinfo->ai_family, target_addrinfo->ai_socktype, target_addrinfo->ai_protocol);
         }
 
-        if (server_fd >= 0 && connect(server_fd, target_addrinfo->ai_addr, target_addrinfo->ai_addrlen) == 0) {
+        if (!target_addrinfo || server_fd < 0) {
+            mark_cache_failed(entry);
+            const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+            send_all(client_fd, err_502, strlen(err_502));
+        } else if (connect(server_fd, target_addrinfo->ai_addr, target_addrinfo->ai_addrlen) == 0) {
 
             if (send_all(server_fd, req_buf, req_len) < 0) {
                 close_connection(server_fd);
                 server_fd = -1;
+                mark_cache_failed(entry);
+                const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+                send_all(client_fd, err_502, strlen(err_502));
             }
 
             char temp_buf[BUF_SIZE];
@@ -440,6 +613,7 @@ void* handle_client(void* arg) {
                     if (errno == EINTR) {
                         continue;
                     }
+                    mark_cache_failed(entry);
                     break;
                 } else if (bytes_recv == 0) {
                     break;
@@ -456,6 +630,7 @@ void* handle_client(void* arg) {
                 
                 if (oom_error) {
                     fprintf(stderr, "Ошибка: не хватает памяти для кэширования ресурса.\n");
+                    mark_cache_failed(entry);
                     break;
                 }
 
@@ -473,6 +648,7 @@ void* handle_client(void* arg) {
             if (server_fd >= 0) {
                 close_connection(server_fd);
             }
+            mark_cache_failed(entry);
             const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
             send_all(client_fd, err_502, strlen(err_502));
         }
@@ -495,6 +671,13 @@ void* handle_client(void* arg) {
             
             while (offset == entry->size && !entry->is_complete) {
                 pthread_cond_wait(&entry->cond, &entry->mutex);
+            }
+
+            if (entry->is_failed) {
+                pthread_mutex_unlock(&entry->mutex);
+                const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+                send_all(client_fd, err_502, strlen(err_502));
+                break;
             }
             
             if (offset == entry->size && entry->is_complete) {
