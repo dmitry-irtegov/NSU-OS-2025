@@ -369,10 +369,7 @@ int main(int argc, char *argv[]) {
                 shutdown(cfd, SHUT_RDWR);
                 close(cfd);
             } else {
-                if (set_nonblocking(cfd) == -1) {
-                    shutdown(cfd, SHUT_RDWR);
-                    close(cfd);
-                } else {
+                {
                     connection_t *c = &g_conns[g_nconns];
                     memset(c, 0, sizeof(*c));
                     c->client_fd = cfd;
@@ -396,7 +393,6 @@ int main(int argc, char *argv[]) {
                 ssize_t n = recv(c->client_fd, c->request + c->request_len,
                                  BUF_SIZE - c->request_len - 1, 0);
                 if (n <= 0) {
-                    if (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) continue;
                     close_connection(i);
                     i--;
                     continue;
@@ -493,7 +489,6 @@ int main(int argc, char *argv[]) {
             if (c->state == STATE_SERVER_READING && FD_ISSET(c->server_fd, &rset)) {
                 ssize_t n = recv(c->server_fd, tmp_buf, sizeof(tmp_buf), 0);
                 if (n == -1) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
                     perror("Error recv from server");
                     close_connection(i);
                     i--;
@@ -533,7 +528,6 @@ int main(int argc, char *argv[]) {
                                  c->response_len - c->bytes_sent,
                                  0);
                 if (n == -1) {
-                    if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
                     perror("Error send to client");
                     close_connection(i);
                     i--;
