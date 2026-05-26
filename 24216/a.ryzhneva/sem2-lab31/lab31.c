@@ -203,9 +203,14 @@ int parse_http_request(Session *s) {
         return -1;
     }
 
+    if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+        fprintf(stderr, "Invalid HTTP version: %s\n", version);
+        return -1;
+    }
+
     char *version_ptr = strstr(s->request_buf, "HTTP/1.");
     if (version_ptr && (version_ptr < end_of_headers)) {
-        strncpy(version_ptr, "HTTP/1.0", 8);
+        memcpy(version_ptr, "HTTP/1.0", 8);
     }
 
     const char *conn_close = "\r\nConnection: close";
@@ -571,6 +576,12 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     int parse_code = parse_http_request(s);
 
                     if (parse_code == 1) {
+                        if (s->uri[0] != '/' && strncmp(s->uri, "http://", 7) != 0) {
+                            fprintf(stderr, "Invalid request target: %s\n", s->uri);
+                            close_session(s);
+                            break;
+                        }
+
                         char target_host[256];
                         char target_port[16];
                         const char *uri_to_parse = s->uri;
@@ -584,6 +595,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                         int uri_is_absolute = (parsed == 1);
 
                         if (parsed == -1) {
+                            fprintf(stderr, "Invalid absolute URI: %s\n", uri_to_parse);
                             close_session(s);
                             break;
                         }
@@ -593,6 +605,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                                                        sizeof(target_host), target_port,
                                                        sizeof(target_port));
                             if (parsed == -1) {
+                                fprintf(stderr, "Invalid Host header\n");
                                 close_session(s);
                                 break;
                             }
