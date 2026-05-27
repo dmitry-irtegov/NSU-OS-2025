@@ -11,6 +11,7 @@ void *thread_func(void *arg) {
     return NULL;
 }
 
+
 int main() {
     pthread_t tid;
     int err;
