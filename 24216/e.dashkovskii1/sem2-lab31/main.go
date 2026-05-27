@@ -196,8 +196,10 @@ func closeConn(clientFd int) {
 	if !ok {
 		return
 	}
+	unix.Shutdown(c.ClientFd, unix.SHUT_RDWR)
 	unix.Close(c.ClientFd)
 	if c.UpstreamFd >= 0 {
+		unix.Shutdown(c.UpstreamFd, unix.SHUT_RDWR)
 		unix.Close(c.UpstreamFd)
 		delete(upmap, c.UpstreamFd)
 	}
@@ -373,6 +375,7 @@ func handleUpstreamWritable(c *Conn) {
 	}
 	c.UpReqPtr += n
 	if c.UpReqPtr >= len(c.UpReq) {
+		unix.Shutdown(c.UpstreamFd, unix.SHUT_WR)
 		c.State = StateForward
 	}
 }
@@ -380,6 +383,7 @@ func handleUpstreamWritable(c *Conn) {
 func handleClientWritableForward(c *Conn) {
 	if c.ClientWritePtr >= len(c.RespBuf) {
 		if c.UpstreamEOF {
+			unix.Shutdown(c.ClientFd, unix.SHUT_WR)
 			c.State = StateDone
 		}
 		return
@@ -391,6 +395,7 @@ func handleClientWritableForward(c *Conn) {
 	}
 	c.ClientWritePtr += n
 	if c.UpstreamEOF && c.ClientWritePtr >= len(c.RespBuf) {
+		unix.Shutdown(c.ClientFd, unix.SHUT_WR)
 		c.State = StateDone
 	}
 }
@@ -403,6 +408,7 @@ func handleSendCache(c *Conn) {
 	}
 	c.SendPtr += n
 	if c.SendPtr >= len(c.SendData) {
+		unix.Shutdown(c.ClientFd, unix.SHUT_WR)
 		c.State = StateDone
 		return
 	}
