@@ -128,8 +128,15 @@ func (p *Proxy) parseRequest(headers string) (host string, port int, path string
 		return "", 0, "", "", fmt.Errorf("empty request")
 	}
 	parts := strings.SplitN(strings.TrimSpace(lines[0]), " ", 3)
-	if len(parts) < 2 || parts[0] != "GET" {
+	if len(parts) < 3 {
+		return "", 0, "", "", fmt.Errorf("invalid request line")
+	}
+	if parts[0] != "GET" {
 		return "", 0, "", "", fmt.Errorf("only GET supported")
+	}
+
+	if parts[2] != "HTTP/1.0" {
+		return "", 0, "", "", fmt.Errorf("unsupported HTTP version: %s", parts[2])
 	}
 	rawURL := parts[1]
 	if !strings.HasPrefix(rawURL, "http://") {
