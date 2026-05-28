@@ -141,7 +141,7 @@ void fetch_and_display(int sock, const char* host, const char* path) {
             if (curr_byte == '\n') {
                 line_count++;
                 if (line_count >= LINES_PER_PAGE) {
-                    printf("[Press SPACE to scroll down]");
+                    printf("[Press SPACE to scroll down]\n");
                     fflush(stdout);
                     paused = true;
                 }
