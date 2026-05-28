@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -26,6 +27,8 @@
 #define BUFFER_SIZE 1024
 #define RESP_BUFFER_SIZE 4096
 
+struct termios orig_termios;
+
 int parse_url(char *url, char *host, int *port, char *path) {
     if (strncmp(url, "http://", 7) != 0) {
         fprintf(stderr, "Unable to parse url\n");
@@ -36,8 +39,13 @@ int parse_url(char *url, char *host, int *port, char *path) {
     while (*p && *p != '/' && *p != ':') {
         p++;
     }
-    strncpy(host, url + 7, p - (url + 7));
-    host[p - (url + 7)] = '\0';
+    int hostlen = p - (url + 7);
+    if (hostlen == 0 || hostlen >= HOST_LEN) {
+        fprintf(stderr, "Host name too long\n");
+        return -1;
+    }
+    memcpy(host, url + 7, hostlen);
+    host[hostlen] = '\0';
 
     if (*p == ':') {
         p++;
@@ -59,13 +67,26 @@ int parse_url(char *url, char *host, int *port, char *path) {
     return 0;
 }
 
-void set_terminal(struct termios *orig_termios) {
-    struct termios new_termios;
-    if (tcgetattr(STDIN_FILENO, orig_termios) != 0) {
+void restore_terminal() {
+    tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
+}
+
+void sigint_handler(int sig) {
+    (void)sig;
+    restore_terminal();
+    exit(EXIT_FAILURE);
+}
+
+void set_terminal() {
+    if (tcgetattr(STDIN_FILENO, &orig_termios) != 0) {
         perror("tcgetattr");
         exit(EXIT_FAILURE);
     }
-    new_termios = *orig_termios;
+    atexit(restore_terminal);
+    signal(SIGINT, sigint_handler);
+    signal(SIGTERM, sigint_handler);
+
+    struct termios new_termios = orig_termios;
     new_termios.c_lflag &= ~(ICANON | ECHO);
     new_termios.c_cc[VMIN] = 1;
     new_termios.c_cc[VTIME] = 0;
@@ -136,11 +157,9 @@ int skip_http_headers(int socket_fd) {
 }
 
 int read_response(int socket_fd) {
-    struct termios orig_termios;
-    set_terminal(&orig_termios);
+    set_terminal();
 
     if (skip_http_headers(socket_fd) == -1) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
         return -1;
     }
 
@@ -222,7 +241,6 @@ int read_response(int socket_fd) {
         }
     }
 
-    tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
     return 0;
 }
 
