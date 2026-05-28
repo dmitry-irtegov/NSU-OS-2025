@@ -15,6 +15,9 @@
 #define MAX_URI_LEN 2048
 #define MAX_METHOD_LEN 16
 #define MAX_VERSION_LEN 16
+#define PARSE_OK 0
+#define PARSE_IO_ERROR -1
+#define PARSE_BAD_REQUEST -2
 
 volatile sig_atomic_t server_running = 1;
 
@@ -141,6 +144,23 @@ void cache_free_all() {
     pthread_mutex_destroy(&cache_list_mutex);
 }
 
+static int is_valid_port_string(const char *port) {
+    if (!port || *port == '\0') {
+        return 0;
+    }
+    int value = 0;
+    for (const char *p = port; *p; ++p) {
+        if (*p < '0' || *p > '9') {
+            return 0;
+        }
+        value = value * 10 + (*p - '0');
+        if (value > 65535) {
+            return 0;
+        }
+    }
+    return value > 0;
+}
+
 int parse_request(int client_fd, char *req_buf, size_t req_buf_size, int *req_len,
                   char *method, size_t method_len, char *uri, size_t uri_len,
                   char *version, size_t version_len) {
@@ -165,22 +185,38 @@ int parse_request(int client_fd, char *req_buf, size_t req_buf_size, int *req_le
         }
 
         if (*req_len >= (int)req_buf_size - 1) {
-            return -1;
+            fprintf(stderr, "Request headers too large\n");
+            return PARSE_BAD_REQUEST;
         }
     }
 
     if (sscanf(req_buf, "%15s %2047s %15s", method, uri, version) != 3) {
-        return -1;
+        fprintf(stderr, "Invalid request line\n");
+        return PARSE_BAD_REQUEST;
     }
 
     if (strncmp(method, "GET", 3) != 0) {
-        return -1;
+        fprintf(stderr, "Unsupported HTTP method: %s\n", method);
+        return PARSE_BAD_REQUEST;
+    }
+
+    if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
+        fprintf(stderr, "Invalid HTTP version: %s\n", version);
+        return PARSE_BAD_REQUEST;
+    }
+
+    {
+        char *end_of_headers = strstr(req_buf, "\r\n\r\n");
+        char *version_ptr = strstr(req_buf, "HTTP/1.");
+        if (version_ptr && end_of_headers && version_ptr < end_of_headers) {
+            memcpy(version_ptr, "HTTP/1.0", 8);
+        }
     }
 
     (void)method_len;
     (void)uri_len;
     (void)version_len;
-    return 0;
+    return PARSE_OK;
 }
 
 int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *port, size_t port_len) {
@@ -217,6 +253,9 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
 
         memcpy(port, colon + 1, port_part_len);
         port[port_part_len] = '\0';
+        if (!is_valid_port_string(port)) {
+            return -1;
+        }
     } else {
         size_t host_part_len = (size_t)(host_end - host_start);
         if (host_part_len == 0 || host_part_len >= host_len) {
@@ -236,9 +275,14 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
 
 int parse_host_header(const char *request, char *host, size_t host_len, char *port, size_t port_len) {
     const char *p = request;
+    int found = 0;
     while ((p = strstr(p, "\r\n")) != NULL) {
         p += 2;
         if (strncasecmp(p, "Host:", 5) == 0) {
+            if (found) {
+                return -2;
+            }
+            found = 1;
             p += 5;
             while (*p == ' ' || *p == '\t') {
                 p++;
@@ -263,6 +307,9 @@ int parse_host_header(const char *request, char *host, size_t host_len, char *po
                 host[host_len_part] = '\0';
                 memcpy(port, colon + 1, port_len_part);
                 port[port_len_part] = '\0';
+                if (!is_valid_port_string(port)) {
+                    return -1;
+                }
             } else {
                 size_t host_len_part = (size_t)(line_end - p);
                 if (host_len_part == 0 || host_len_part >= host_len) {
@@ -479,6 +526,18 @@ ssize_t send_all(int sockfd, const char *buf, size_t len) {
     return total;
 }
 
+static void send_http_error(int fd, const char *status_line) {
+    if (!status_line) {
+        return;
+    }
+    char response[128];
+    int len = snprintf(response, sizeof(response), "HTTP/1.0 %s\r\n\r\n", status_line);
+    if (len <= 0 || len >= (int)sizeof(response)) {
+        return;
+    }
+    send_all(fd, response, (size_t)len);
+}
+
 void* handle_client(void* arg) {
     int client_fd = *((int*)arg);
     
@@ -489,9 +548,21 @@ void* handle_client(void* arg) {
     char version[MAX_VERSION_LEN];
     
 
-    if (parse_request(client_fd, req_buf, sizeof(req_buf), &req_len,
+    int parse_result = parse_request(client_fd, req_buf, sizeof(req_buf), &req_len,
                       method, sizeof(method), uri, sizeof(uri),
-                      version, sizeof(version)) != 0) {
+                      version, sizeof(version));
+    if (parse_result != PARSE_OK) {
+        if (parse_result == PARSE_BAD_REQUEST) {
+            send_http_error(client_fd, "400 Bad Request");
+        }
+        close_connection(client_fd);
+        free(arg);
+        return NULL;
+    }
+
+    if (uri[0] != '/' && strncmp(uri, "http://", 7) != 0) {
+        fprintf(stderr, "Invalid request target: %s\n", uri);
+        send_http_error(client_fd, "400 Bad Request");
         close_connection(client_fd);
         free(arg);
         return NULL;
@@ -500,26 +571,54 @@ void* handle_client(void* arg) {
     char target_host[256];
     char target_port[16];
     const char *uri_to_parse = uri;
+
     if (strncmp(uri, "/http://", 8) == 0) {
         uri_to_parse = uri + 1;
     }
+
     int parsed = parse_target_from_uri(uri_to_parse, target_host, sizeof(target_host), target_port, sizeof(target_port));
     int uri_is_absolute = (parsed == 1);
+
     if (parsed == -1) {
+
+        fprintf(stderr, "Invalid absolute URI: %s\n", uri_to_parse);
+        send_http_error(client_fd, "400 Bad Request");
         close_connection(client_fd);
         free(arg);
         return NULL;
     } else if (parsed == 0) {
+
         parsed = parse_host_header(req_buf, target_host, sizeof(target_host), target_port, sizeof(target_port));
-        if (parsed == -1) {
+
+        if (parsed == -2) {
+            fprintf(stderr, "Duplicate Host header\n");
+            send_http_error(client_fd, "400 Bad Request");
             close_connection(client_fd);
             free(arg);
             return NULL;
         }
+
+        if (parsed == -1) {
+            fprintf(stderr, "Invalid Host header\n");
+            send_http_error(client_fd, "400 Bad Request");
+            close_connection(client_fd);
+            free(arg);
+            return NULL;
+        }
+
+        if (parsed == 0 && strcmp(version, "HTTP/1.1") == 0) {
+            fprintf(stderr, "Missing Host header for HTTP/1.1\n");
+            send_http_error(client_fd, "400 Bad Request");
+            close_connection(client_fd);
+            free(arg);
+            return NULL;
+        }
+
     }
 
     const char *host_to_use = (parsed == 1) ? target_host : default_target_host;
     const char *port_to_use = (parsed == 1) ? target_port : default_target_port;
+
     if (!host_to_use || !port_to_use) {
         close_connection(client_fd);
         free(arg);
@@ -528,9 +627,11 @@ void* handle_client(void* arg) {
 
     if (uri_is_absolute) {
         const char *path_start = strchr(uri_to_parse + strlen("http://"), '/');
+
         if (!path_start) {
             path_start = "/";
         }
+        
         if (replace_request_target(req_buf, &req_len, sizeof(req_buf), path_start) < 0) {
             close_connection(client_fd);
             free(arg);
@@ -595,16 +696,14 @@ void* handle_client(void* arg) {
 
         if (!target_addrinfo || server_fd < 0) {
             mark_cache_failed(entry);
-            const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
-            send_all(client_fd, err_502, strlen(err_502));
+            send_http_error(client_fd, "502 Bad Gateway");
         } else if (connect(server_fd, target_addrinfo->ai_addr, target_addrinfo->ai_addrlen) == 0) {
 
             if (send_all(server_fd, req_buf, req_len) < 0) {
                 close_connection(server_fd);
                 server_fd = -1;
                 mark_cache_failed(entry);
-                const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
-                send_all(client_fd, err_502, strlen(err_502));
+                send_http_error(client_fd, "502 Bad Gateway");
             }
 
             char temp_buf[BUF_SIZE];
@@ -653,8 +752,7 @@ void* handle_client(void* arg) {
                 close_connection(server_fd);
             }
             mark_cache_failed(entry);
-            const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
-            send_all(client_fd, err_502, strlen(err_502));
+            send_http_error(client_fd, "502 Bad Gateway");
         }
 
         if (target_addrinfo) {
@@ -679,8 +777,7 @@ void* handle_client(void* arg) {
 
             if (entry->is_failed) {
                 pthread_mutex_unlock(&entry->mutex);
-                const char *err_502 = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
-                send_all(client_fd, err_502, strlen(err_502));
+                send_http_error(client_fd, "502 Bad Gateway");
                 break;
             }
             
@@ -754,8 +851,7 @@ int main(int argc, char** argv) {
 
         if (pthread_create(&tid, &attr, handle_client, arg) != 0) {
             perror("Ошибка pthread_create. Лимит потоков исчерпан.");
-            const char *err_msg = "HTTP/1.0 503 Service Unavailable\r\n\r\n";
-            send(client_fd, err_msg, strlen(err_msg), 0);
+            send_http_error(client_fd, "503 Service Unavailable");
             close_connection(client_fd);
             free(arg);
         }
