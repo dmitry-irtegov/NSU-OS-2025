@@ -107,10 +107,10 @@ int main(int argc, char *argv[]) {
 
     set_raw_mode();
 
-    char *data = NULL;
+    char *data = NULL; // данные из сети
     size_t data_cap = 0;
-    size_t data_len = 0;
-    size_t out_pos = 0;
+    size_t data_len = 0; //сколько байт в буфере
+    size_t out_pos = 0; // до куда уже напечатали
     int headers_done = 0; // нашли ли конец заголовка
     int lines_printed = 0;
     int paused = 0;
@@ -143,7 +143,7 @@ int main(int argc, char *argv[]) {
 
         fd_set rfds;
         FD_ZERO(&rfds);
-        if (!sock_eof)
+        if (!sock_eof) // если открыт
             FD_SET(sockfd, &rfds);
         if (paused)
             FD_SET(STDIN_FILENO, &rfds);
@@ -191,7 +191,10 @@ int main(int argc, char *argv[]) {
     free(data);
     restore_mode();
 
-    shutdown(sockfd, SHUT_RDWR);
+    if (shutdown(sockfd, SHUT_RDWR) < 0) {
+        perror("shutdown");
+        return 1;
+    }
     close(sockfd);
     return 0;
 }
