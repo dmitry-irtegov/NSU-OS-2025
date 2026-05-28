@@ -187,19 +187,22 @@ func readRequest(fd int) ([]byte, error) {
 	}
 }
 
-func readResponse(fd int) ([]byte, bool) {
-	var resp []byte
-	buf := make([]byte, BufSize)
+func readHead(fd int) ([]byte, []byte, error) {
+	var buf []byte
+	tmp := make([]byte, BufSize)
 	for {
-		n, err := readEINTR(fd, buf)
+		n, err := readEINTR(fd, tmp)
 		if n > 0 {
-			resp = append(resp, buf[:n]...)
+			buf = append(buf, tmp[:n]...)
+			if i := bytes.Index(buf, []byte("\r\n\r\n")); i >= 0 {
+				return buf[:i+4], buf[i+4:], nil
+			}
 		}
 		if err != nil {
-			return resp, false
+			return buf, nil, err
 		}
 		if n == 0 {
-			return resp, true
+			return buf, nil, fmt.Errorf("eof before headers")
 		}
 	}
 }
@@ -328,22 +331,48 @@ func handleConn(clientFd int) {
 	}
 	unix.Shutdown(ufd, unix.SHUT_WR)
 
-	resp, ok := readResponse(ufd)
-	if !ok {
-		if len(resp) > 0 {
-			_ = writeAllFd(clientFd, resp)
+	head, body, err := readHead(ufd)
+	if err != nil {
+		if len(head) > 0 {
+			_ = writeAllFd(clientFd, head)
 		}
 		return
 	}
+	head = forceConnectionClose(head)
 
-	out := forceConnectionClose(resp)
-	if writeAllFd(clientFd, out) == nil {
+	resp := make([]byte, 0, len(head)+len(body)+BufSize)
+	resp = append(resp, head...)
+	resp = append(resp, body...)
+
+	clientAlive := writeAllFd(clientFd, head) == nil
+	if clientAlive && len(body) > 0 && writeAllFd(clientFd, body) != nil {
+		clientAlive = false
+	}
+
+	tmp := make([]byte, BufSize)
+	for {
+		n, rErr := readEINTR(ufd, tmp)
+		if n > 0 {
+			resp = append(resp, tmp[:n]...)
+			if clientAlive && writeAllFd(clientFd, tmp[:n]) != nil {
+				clientAlive = false
+			}
+		}
+		if rErr != nil {
+			return
+		}
+		if n == 0 {
+			break
+		}
+	}
+
+	if clientAlive {
 		unix.Shutdown(clientFd, unix.SHUT_WR)
 	}
 
 	if isCacheable(resp) {
 		cacheMu.Lock()
-		cache[cacheKey] = out
+		cache[cacheKey] = resp
 		cacheMu.Unlock()
 	}
 }
