@@ -10,24 +10,20 @@
 #define CHECK_INTERVAL 1000000L
 
 static volatile sig_atomic_t stop_requested = 0;
-
 static pthread_barrier_t barrier;
-
-static int finish_requested = 0;
+static int *stop_flags = NULL;
 
 typedef struct {
     long thread_id;
     long num_threads;
 } thread_data_t;
 
-static void sigint_handler(int signo)
-{
+static void sigint_handler(int signo) {
     (void)signo;
     stop_requested = 1;
 }
 
-static void *compute_partial_sum(void *arg)
-{
+static void *compute_partial_sum(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
     long id = data->thread_id;
     long n_threads = data->num_threads;
@@ -40,6 +36,7 @@ static void *compute_partial_sum(void *arg)
     *partial = 0.0;
 
     long i = id;
+    long block = 0;
 
     while (1) {
         for (long step = 0; step < CHECK_INTERVAL; step++, i += n_threads) {
@@ -47,35 +44,37 @@ static void *compute_partial_sum(void *arg)
             *partial -= 1.0 / (4.0 * i + 3.0);
         }
 
+        int slot = (int)(block % 2);
+
+        stop_flags[id * 2 + slot] = stop_requested ? 1 : 0;
+
         int rc = pthread_barrier_wait(&barrier);
         if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
             free(partial);
             pthread_exit(NULL);
         }
 
-        if (rc == PTHREAD_BARRIER_SERIAL_THREAD) {
-            if (stop_requested) {
-                finish_requested = 1;
+        int need_finish = 0;
+
+        for (long j = 0; j < n_threads; j++) {
+            if (stop_flags[j * 2 + slot]) {
+                need_finish = 1;
+                break;
             }
         }
 
-        rc = pthread_barrier_wait(&barrier);
-        if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
-            free(partial);
-            pthread_exit(NULL);
-        }
-
-        if (finish_requested) {
+        if (need_finish) {
             pthread_exit(partial);
         }
+
+        block++;
     }
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <num_threads>\n", argv[0]);
-        return EXIT_FAILURE;
+        return 1;
     }
 
     char *endptr = NULL;
@@ -84,7 +83,7 @@ int main(int argc, char **argv)
 
     if (errno != 0 || *endptr != '\0' || num_threads <= 0) {
         fprintf(stderr, "Invalid thread count: %s\n", argv[1]);
-        return EXIT_FAILURE;
+        return 1;
     }
 
     struct sigaction sa;
@@ -94,17 +93,19 @@ int main(int argc, char **argv)
 
     if (sigaction(SIGINT, &sa, NULL) == -1) {
         perror("sigaction");
-        return EXIT_FAILURE;
+        return 1;
     }
 
     pthread_t *threads = malloc(sizeof(pthread_t) * num_threads);
     thread_data_t *thread_data = malloc(sizeof(thread_data_t) * num_threads);
+    stop_flags = calloc((size_t)num_threads * 2, sizeof(int));
 
-    if (threads == NULL || thread_data == NULL) {
+    if (threads == NULL || thread_data == NULL || stop_flags == NULL) {
         perror("malloc");
         free(threads);
         free(thread_data);
-        return EXIT_FAILURE;
+        free(stop_flags);
+        return 1;
     }
 
     int ret = pthread_barrier_init(&barrier, NULL, (unsigned)num_threads);
@@ -112,7 +113,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "pthread_barrier_init failed: %s\n", strerror(ret));
         free(threads);
         free(thread_data);
-        return EXIT_FAILURE;
+        free(stop_flags);
+        return 1;
     }
 
     for (long i = 0; i < num_threads; i++) {
@@ -122,7 +124,7 @@ int main(int argc, char **argv)
         ret = pthread_create(&threads[i], NULL, compute_partial_sum, &thread_data[i]);
         if (ret != 0) {
             fprintf(stderr, "pthread_create failed: %s\n", strerror(ret));
-            exit(EXIT_FAILURE);
+            exit(1);
         }
     }
 
@@ -140,7 +142,8 @@ int main(int argc, char **argv)
             pthread_barrier_destroy(&barrier);
             free(threads);
             free(thread_data);
-            return EXIT_FAILURE;
+            free(stop_flags);
+            return 1;
         }
 
         if (retval == NULL) {
@@ -148,7 +151,8 @@ int main(int argc, char **argv)
             pthread_barrier_destroy(&barrier);
             free(threads);
             free(thread_data);
-            return EXIT_FAILURE;
+            free(stop_flags);
+            return 1;
         }
 
         double *partial = (double *)retval;
@@ -163,6 +167,7 @@ int main(int argc, char **argv)
     pthread_barrier_destroy(&barrier);
     free(threads);
     free(thread_data);
+    free(stop_flags);
 
-    return EXIT_SUCCESS;
+    return 0;
 }
