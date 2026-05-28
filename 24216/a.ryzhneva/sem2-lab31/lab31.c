@@ -46,6 +46,7 @@ typedef struct {
     int request_sent;
     char request_buf[BUF_SIZE];
     char uri[MAX_URI_LEN];
+    char version[MAX_VERSION_LEN];
     CacheEntry *cache_entry;
     size_t cache_offset;
     int pfd_client_idx;
@@ -134,6 +135,23 @@ void cache_free_all() {
     cache_head = NULL;
 }
 
+static int is_valid_port_string(const char *port) {
+    if (!port || *port == '\0') {
+        return 0;
+    }
+    int value = 0;
+    for (const char *p = port; *p; ++p) {
+        if (*p < '0' || *p > '9') {
+            return 0;
+        }
+        value = value * 10 + (*p - '0');
+        if (value > 65535) {
+            return 0;
+        }
+    }
+    return value > 0;
+}
+
 static const char *default_target_host = NULL;
 static const char *default_target_port = NULL;
 Session sessions[MAX_SESSIONS];
@@ -158,6 +176,18 @@ void set_blocking(int fd) {
         return;
     }
     fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+}
+
+static void send_http_error(Session *s, const char *status_line) {
+    if (!s || !status_line) {
+        return;
+    }
+    char response[128];
+    int len = snprintf(response, sizeof(response), "HTTP/1.0 %s\r\n\r\n", status_line);
+    if (len <= 0 || len >= (int)sizeof(response)) {
+        return;
+    }
+    send(s->fd_client, response, (size_t)len, 0);
 }
 
 void close_session(Session *s) {
@@ -195,6 +225,11 @@ int parse_http_request(Session *s) {
 
     if (matched != 3) {
         fprintf(stderr, "Invalid HTTP request format.\n");
+        return -1;
+    }
+
+    if (snprintf(s->version, sizeof(s->version), "%s", version) >= (int)sizeof(s->version)) {
+        fprintf(stderr, "Invalid HTTP version length.\n");
         return -1;
     }
 
@@ -260,6 +295,9 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
 
         memcpy(port, colon + 1, port_part_len);
         port[port_part_len] = '\0';
+        if (!is_valid_port_string(port)) {
+            return -1;
+        }
     } else {
         size_t host_part_len = (size_t)(host_end - host_start);
         if (host_part_len == 0 || host_part_len >= host_len) {
@@ -279,9 +317,12 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
 
 int parse_host_header(const char *request, char *host, size_t host_len, char *port, size_t port_len) {
     const char *p = request;
+    int found = 0;
     while ((p = strstr(p, "\r\n")) != NULL) {
         p += 2;
         if (strncasecmp(p, "Host:", 5) == 0) {
+            if (found) return -2;
+            found = 1;
             p += 5;
             while (*p == ' ' || *p == '\t') {
                 p++;
@@ -300,6 +341,7 @@ int parse_host_header(const char *request, char *host, size_t host_len, char *po
                 host[host_len_part] = '\0';
                 memcpy(port, colon + 1, port_len_part);
                 port[port_len_part] = '\0';
+                if (!is_valid_port_string(port)) return -1;
             } else {
                 size_t host_len_part = (size_t)(line_end - p);
                 if (host_len_part == 0 || host_len_part >= host_len) return -1;
@@ -558,6 +600,8 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         case STATE_READ_REQUEST:
             if (client_idx >= 0 && (pfds[client_idx].revents & POLLIN)) {
                 if (s->request_len >= BUF_SIZE - 1) {
+                    fprintf(stderr, "Request headers too large\n");
+                    send_http_error(s, "400 Bad Request");
                     close_session(s);
                     break;
                 }
@@ -578,6 +622,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     if (parse_code == 1) {
                         if (s->uri[0] != '/' && strncmp(s->uri, "http://", 7) != 0) {
                             fprintf(stderr, "Invalid request target: %s\n", s->uri);
+                            send_http_error(s, "400 Bad Request");
                             close_session(s);
                             break;
                         }
@@ -596,6 +641,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                         if (parsed == -1) {
                             fprintf(stderr, "Invalid absolute URI: %s\n", uri_to_parse);
+                            send_http_error(s, "400 Bad Request");
                             close_session(s);
                             break;
                         }
@@ -604,8 +650,21 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                             parsed = parse_host_header(s->request_buf, target_host,
                                                        sizeof(target_host), target_port,
                                                        sizeof(target_port));
+                            if (parsed == -2) {
+                                fprintf(stderr, "Duplicate Host header\n");
+                                send_http_error(s, "400 Bad Request");
+                                close_session(s);
+                                break;
+                            }
                             if (parsed == -1) {
                                 fprintf(stderr, "Invalid Host header\n");
+                                send_http_error(s, "400 Bad Request");
+                                close_session(s);
+                                break;
+                            }
+                            if (parsed == 0 && strcmp(s->version, "HTTP/1.1") == 0) {
+                                fprintf(stderr, "Missing Host header for HTTP/1.1\n");
+                                send_http_error(s, "400 Bad Request");
                                 close_session(s);
                                 break;
                             }
@@ -711,6 +770,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                         s->request_sent = 0;
                         s->state = STATE_SEND_REQUEST;
                     } else if (parse_code == -1) {
+                        send_http_error(s, "400 Bad Request");
                         close_session(s);
                     }
                 } else if (bytes_read == 0) {
@@ -866,6 +926,7 @@ void handle_new_connection(int listen_fd) {
     sessions[free_idx].request_sent = 0;
     sessions[free_idx].connect_pending = 0;
     sessions[free_idx].uri[0] = '\0';
+    sessions[free_idx].version[0] = '\0';
     sessions[free_idx].cache_entry = NULL;
     sessions[free_idx].cache_offset = 0;
 }
