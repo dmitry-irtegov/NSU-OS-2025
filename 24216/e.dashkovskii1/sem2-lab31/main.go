@@ -48,6 +48,7 @@ type Conn struct {
 	SendData       []byte
 	ClientWritePtr int
 	UpstreamEOF    bool
+	HeadersDone    bool
 }
 
 var (
@@ -321,7 +322,38 @@ func isCacheable(resp []byte) bool {
 	return true
 }
 
+func forceConnectionClose(resp []byte) []byte {
+	headerEnd := bytes.Index(resp, []byte("\r\n\r\n"))
+	if headerEnd < 0 {
+		return resp
+	}
+	header := resp[:headerEnd]
+	body := resp[headerEnd+4:]
+
+	lines := strings.Split(string(header), "\r\n")
+	out := make([]string, 0, len(lines)+1)
+	out = append(out, lines[0])
+	out = append(out, "Connection: close")
+	for _, l := range lines[1:] {
+		lower := strings.ToLower(l)
+		if strings.HasPrefix(lower, "connection:") ||
+			strings.HasPrefix(lower, "proxy-connection:") ||
+			strings.HasPrefix(lower, "keep-alive:") {
+			continue
+		}
+		out = append(out, l)
+	}
+	newHeader := strings.Join(out, "\r\n")
+
+	result := make([]byte, 0, len(newHeader)+4+len(body))
+	result = append(result, newHeader...)
+	result = append(result, "\r\n\r\n"...)
+	result = append(result, body...)
+	return result
+}
+
 func upstreamFinish(c *Conn, success bool) {
+	c.HeadersDone = true
 	if success && len(c.RespBuf) > 0 && isCacheable(c.RespBuf) {
 		cache[c.CacheKey] = &CacheEntry{Data: c.RespBuf}
 	}
@@ -348,6 +380,10 @@ func handleUpstreamReadable(c *Conn) {
 		return
 	}
 	c.RespBuf = append(c.RespBuf, buf[:n]...)
+	if !c.HeadersDone && bytes.Contains(c.RespBuf, []byte("\r\n\r\n")) {
+		c.RespBuf = forceConnectionClose(c.RespBuf)
+		c.HeadersDone = true
+	}
 }
 
 func handleUpstreamWritable(c *Conn) {
@@ -448,7 +484,7 @@ func main() {
 					fds = append(fds, unix.PollFd{Fd: int32(c.UpstreamFd), Events: unix.POLLOUT})
 				}
 			case StateForward:
-				if c.ClientWritePtr < len(c.RespBuf) {
+				if c.HeadersDone && c.ClientWritePtr < len(c.RespBuf) {
 					fds = append(fds, unix.PollFd{Fd: int32(c.ClientFd), Events: unix.POLLOUT})
 				}
 				if c.UpstreamFd >= 0 {
