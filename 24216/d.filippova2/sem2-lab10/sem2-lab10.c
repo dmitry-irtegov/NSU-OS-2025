@@ -16,16 +16,12 @@ void get_fork (int, int, char *);
 void down_forks (int, int);
 pthread_mutex_t foodlock;
 
-int sleep_seconds = 0;
 
 int
 main (int argn,
       char **argv)
 {
   int i;
-
-  if (argn == 2)
-    sleep_seconds = atoi (argv[1]);
 
   pthread_mutex_init (&foodlock, NULL);
   for (i = 0; i < PHILO; i++)
@@ -54,8 +50,6 @@ philosopher (void *num)
  
   while (f = food_on_table ()) {
 
-    if (id == 1)
-      sleep (sleep_seconds);
 
     int first_fork, second_fork;
     char *first_hand, *second_hand;
