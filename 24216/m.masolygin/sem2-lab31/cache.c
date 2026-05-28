@@ -11,16 +11,18 @@ cache_entry_t* cache_entry_new(char* body, size_t body_len, char* key) {
     entry->next = NULL;
     return entry;
 }
+
 void cache_entry_free(cache_entry_t* entry) {
     free(entry->body);
     free(entry->key);
     free(entry);
 }
+
 cache_entry_t* cache_put(cache_t* cache, cache_entry_t* entry) {
     cache_entry_t* cur;
     cache_entry_t* removed = NULL;
 
-    for (cur = cache->sentinel->next; cur; cur = cur->next) {
+    for (cur = cache->sentinel; cur->next; cur = cur->next) {
         if (!strcmp(cur->next->key, entry->key)) {
             entry->next = cur->next->next;
             removed = cur->next;
@@ -50,7 +52,8 @@ cache_entry_t* cache_put(cache_t* cache, cache_entry_t* entry) {
     cache->tail = entry;
 
     return removed;
-};
+}
+
 cache_entry_t* cache_get(cache_t* cache, char* key) {
     for (cache_entry_t* cur = cache->sentinel->next; cur; cur = cur->next) {
         if (!strcmp(cur->key, key)) {
@@ -58,7 +61,7 @@ cache_entry_t* cache_get(cache_t* cache, char* key) {
         }
     }
     return NULL;
-};
+}
 
 cache_t* cache_new(int capacity) {
     cache_t* cache = malloc(sizeof(cache_t));
@@ -73,7 +76,8 @@ cache_t* cache_new(int capacity) {
     cache->sentinel->next = NULL;
     cache->tail = cache->sentinel;
     return cache;
-};
+}
+
 void cache_free(cache_t* cache) {
     for (cache_entry_t* cur = cache->sentinel->next; cur;) {
         cache_entry_t* next = cur->next;
@@ -82,4 +86,4 @@ void cache_free(cache_t* cache) {
     }
     free(cache->sentinel);
     free(cache);
-};
+}

@@ -111,7 +111,7 @@ void http_send_error(int fd, int code, const char* msg) {
                  code, msg);
 
     int len = snprintf(response, sizeof(response),
-                       "HTTP/1.1 %d %s\r\n"
+                       "HTTP/1.0 %d %s\r\n"
                        "Content-Type: text/html\r\n"
                        "Connection: close\r\n"
                        "Content-Length: %d\r\n"
@@ -135,10 +135,14 @@ int tcp_connect(const char* host, int port) {
     int sock = -1;
     for (rp = res; rp != NULL; rp = rp->ai_next) {
         sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock < 0) continue;
+        if (sock < 0) break;
 
         int flags = fcntl(sock, F_GETFL, 0);
-        fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+        if (flags < 0 || fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
+            close(sock);
+            sock = -1;
+            continue;
+        }
 
         int r = connect(sock, rp->ai_addr, rp->ai_addrlen);
         if (r == 0 || errno == EINPROGRESS) break;

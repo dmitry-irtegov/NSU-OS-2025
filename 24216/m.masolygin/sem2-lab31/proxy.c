@@ -129,15 +129,6 @@ int resp_grow(conn_t* c, size_t needed) {
     return 0;
 }
 
-int req_wants_keepalive(conn_t* c) {
-    char val[64];
-    if (http_header_find(c->rbuf, "Proxy-Connection", val, sizeof(val)))
-        return strcasecmp(val, "keep-alive") == 0;
-    if (http_header_find(c->rbuf, "Connection", val, sizeof(val)))
-        return strcasecmp(val, "keep-alive") == 0;
-    return (strstr(c->rbuf, "HTTP/1.1") != NULL);
-}
-
 int is_2xx(const char* buf) {
     const char* sp = memchr(buf, ' ', 12);
     if (!sp) return 0;
@@ -213,9 +204,6 @@ int main(int argc, char* argv[]) {
         perror("listen");
         return 1;
     }
-
-    int flags = fcntl(listen_fd, F_GETFL, 0);
-    fcntl(listen_fd, F_SETFL, flags | O_NONBLOCK);
 
     fprintf(stderr, "Proxy listening on port %d\n", port);
 
@@ -300,9 +288,6 @@ int main(int argc, char* argv[]) {
                 accept(listen_fd, (struct sockaddr*)&cli_addr, &cli_len);
 
             if (client_fd >= 0) {
-                int cfl = fcntl(client_fd, F_GETFL, 0);
-                fcntl(client_fd, F_SETFL, cfl | O_NONBLOCK);
-
                 if (conn_alloc(client_fd) < 0) {
                     http_send_error(client_fd, 503, "Service Unavailable");
                     close(client_fd);
@@ -327,6 +312,12 @@ int main(int argc, char* argv[]) {
             switch (c->state) {
                 case S_READ_REQ:
                     if (cli_ev & (POLLIN | POLLHUP)) {
+                        if (c->rbuf_len >= BUF_SIZE - 1) {
+                            http_send_error(c->client_fd, 413,
+                                            "Request Entity Too Large");
+                            conn_close(i);
+                            continue;
+                        }
                         ssize_t n = recv(c->client_fd, c->rbuf + c->rbuf_len,
                                          BUF_SIZE - c->rbuf_len - 1, 0);
                         if (n == 0) {
@@ -334,8 +325,6 @@ int main(int argc, char* argv[]) {
                             continue;
                         }
                         if (n < 0) {
-                            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                                continue;
                             conn_close(i);
                             continue;
                         }
@@ -370,7 +359,24 @@ int main(int argc, char* argv[]) {
                                 }
                                 continue;
                             }
-
+                            if (hreq.port == 80) {
+                                c->rbuf_len =
+                                    (size_t)snprintf(c->rbuf, BUF_SIZE,
+                                                     "GET %s HTTP/1.0\r\n"
+                                                     "Host: %s\r\n"
+                                                     "Connection: close\r\n"
+                                                     "\r\n",
+                                                     hreq.path, hreq.host);
+                            } else {
+                                c->rbuf_len = (size_t)snprintf(
+                                    c->rbuf, BUF_SIZE,
+                                    "GET %s HTTP/1.0\r\n"
+                                    "Host: %s:%d\r\n"
+                                    "Connection: close\r\n"
+                                    "\r\n",
+                                    hreq.path, hreq.host, hreq.port);
+                            }
+                            c->rbuf_sent = 0;
                             c->server_fd = tcp_connect(hreq.host, hreq.port);
                             if (c->server_fd < 0) {
                                 http_send_error(c->client_fd, 502,
@@ -408,7 +414,6 @@ int main(int argc, char* argv[]) {
                             send(c->server_fd, c->rbuf + c->rbuf_sent,
                                  c->rbuf_len - c->rbuf_sent, 0);
                         if (sent < 0) {
-                            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
                             conn_close(i);
                             continue;
                         }
@@ -435,10 +440,8 @@ int main(int argc, char* argv[]) {
                         ssize_t n = recv(c->server_fd, c->wbuf + c->wbuf_len,
                                          BUF_SIZE, 0);
                         if (n < 0) {
-                            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                                conn_close(i);
-                                continue;
-                            }
+                            conn_close(i);
+                            continue;
                         } else if (n == 0) {
                             shutdown(c->server_fd, SHUT_RDWR);
                             close(c->server_fd);
@@ -457,11 +460,6 @@ int main(int argc, char* argv[]) {
                                                          conn_hdr,
                                                          sizeof(conn_hdr)) &&
                                         strcasecmp(conn_hdr, "close") == 0) {
-                                        c->server_close = 1;
-                                    }
-                                    if (c->body_expected == 0 &&
-                                        !c->server_close &&
-                                        strncmp(c->wbuf, "HTTP/1.0", 8) == 0) {
                                         c->server_close = 1;
                                     }
                                 }
@@ -486,13 +484,10 @@ int main(int argc, char* argv[]) {
                             send(c->client_fd, c->wbuf + c->wbuf_sent,
                                  c->wbuf_len - c->wbuf_sent, 0);
                         if (sent < 0) {
-                            if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                                conn_close(i);
-                                continue;
-                            }
-                        } else {
-                            c->wbuf_sent += (size_t)sent;
+                            conn_close(i);
+                            continue;
                         }
+                        c->wbuf_sent += (size_t)sent;
                     }
 
                     if (c->server_close && c->wbuf_sent >= c->wbuf_len) {
@@ -506,30 +501,12 @@ int main(int argc, char* argv[]) {
                             send(c->client_fd, c->wbuf + c->wbuf_sent,
                                  c->wbuf_len - c->wbuf_sent, 0);
                         if (sent < 0) {
-                            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
                             conn_close(i);
                             continue;
                         }
                         c->wbuf_sent += (size_t)sent;
                         if (c->wbuf_sent >= c->wbuf_len) {
-                            int keepalive =
-                                req_wants_keepalive(c) && !c->server_close;
-                            if (keepalive) {
-                                c->state = S_READ_REQ;
-                                c->rbuf_len = 0;
-                                c->rbuf_sent = 0;
-                                c->wbuf_len = 0;
-                                c->wbuf_sent = 0;
-                                c->header_end = 0;
-                                c->body_expected = 0;
-                                c->body_got = 0;
-                                c->server_close = 0;
-                                c->url[0] = '\0';
-                                resp_free(c);
-                            } else {
-                                c->state = S_DONE;
-                                conn_close(i);
-                            }
+                            conn_close(i);
                         }
                     }
                     break;
