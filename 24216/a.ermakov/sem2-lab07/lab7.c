@@ -154,8 +154,14 @@ void traverse_dir(const char *src_dir, const char *dst_dir) {
             continue;
         }
 
-        if (stat(src_path, &st) != 0) {
-            error_log("stat failed", src_path);
+        if (lstat(src_path, &st) != 0) {
+            error_log("lstat failed", src_path);
+            free(src_path);
+            free(dst_path);
+            continue;
+        }
+
+        if (S_ISLNK(st.st_mode)) {
             free(src_path);
             free(dst_path);
             continue;
