@@ -47,6 +47,11 @@ void parse_url(const char *url, char *host, size_t host_sz, char *path, size_t p
 
 int connect_to_host(const char *host, int port) {
     struct hostent *he = gethostbyname(host);
+    if (he->h_addrtype != AF_INET) {
+        fprintf(stderr, "IPv4 only\n");
+        exit(1);
+    }
+
     if (!he) {
         fprintf(stderr, "Cannot resolve host: %s\n", host);
         exit(1);
@@ -93,7 +98,7 @@ int main(int argc, char *argv[]) {
     char host[256], path[2048];
     parse_url(argv[1], host, sizeof(host), path, sizeof(path));
 
-    int sockfd = connect_to_host(host, 8001);
+    int sockfd = connect_to_host(host, 80);
 
     char request[4096];
     int reqlen = snprintf(request, sizeof(request),
