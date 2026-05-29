@@ -121,20 +121,22 @@ void fetch_and_display(int sock, const char* host, const char* path) {
             FD_SET(sock, &descriptor_set);   
         }
 
-        int status = select(max_descriptor + 1, &descriptor_set, NULL, NULL, NULL);
-        if (status < 0) break;
+        if (paused || buf_pos == buf_len){
+            int status = select(max_descriptor + 1, &descriptor_set, NULL, NULL, NULL);
+            if (status < 0) break;
 
-        if (FD_ISSET(STDIN_FILENO, &descriptor_set)) {
-            char key;
-            if (read(STDIN_FILENO, &key, 1) > 0) {
-                if (paused && key == ' ') {
-                    paused = false; 
-                    line_count = 0; 
-                    fflush(stdout);
+            if (FD_ISSET(STDIN_FILENO, &descriptor_set)) {
+                char key;
+                if (read(STDIN_FILENO, &key, 1) > 0) {
+                    if (paused && key == ' ') {
+                        paused = false; 
+                        line_count = 0; 
+                        fflush(stdout);
+                    }
                 }
             }
         }
-
+        
         if (!paused) {
             if (buf_pos == buf_len && FD_ISSET(sock, &descriptor_set)) {
                 buf_len = recv(sock, buffer_read, sizeof(buffer_read), 0); 
@@ -157,12 +159,11 @@ void fetch_and_display(int sock, const char* host, const char* path) {
                     continue;
                 }
                 putchar(curr_byte);
-                fflush(stdout);
 
                 if (curr_byte == '\n') {
                     line_count++;
                     if (line_count >= LINES_PER_PAGE) {
-                        printf("[Press SPACE to scroll down]");
+                        printf("[Press SPACE to scroll down]\n");
                         fflush(stdout);
                         paused = true; 
                         break;
