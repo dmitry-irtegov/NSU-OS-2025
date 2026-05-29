@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
     char host[256], path[2048];
     parse_url(argv[1], host, sizeof(host), path, sizeof(path));
 
-    int sockfd = connect_to_host(host, 80);
+    int sockfd = connect_to_host(host, 8001);
 
     char request[4096];
     int reqlen = snprintf(request, sizeof(request),
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
             fflush(stdout);
         }
 
-        if (sock_eof && (!headers_done || out_pos >= data_len))
+        if (sock_eof && (!headers_done || out_pos >= data_len)) // всё выведено
             break;
 
         fd_set rfds;
