@@ -18,7 +18,7 @@ void restore_terminal_state() {
 
 void setup_unbuffered_mode() {
     tcgetattr(STDIN_FILENO, &orig_tty_settings);
-    atexit(restore_terminal_state);
+    atexit(restore_terminal_state); 
 
     struct termios raw_config = orig_tty_settings;
     raw_config.c_lflag &= ~(ICANON | ECHO);
@@ -67,25 +67,35 @@ int parse_address(const char* url, char* host, char* port, char* path) {
 }
 
 int connect_to_server(const char* host, const char* port) {
-    struct addrinfo sock_criteria, *res, *p;
-    int sock = -1;
-
+    struct addrinfo sock_criteria, *res; 
+    int sock = -1; 
     memset(&sock_criteria, 0, sizeof(sock_criteria));
+
     sock_criteria.ai_family = AF_INET; 
     sock_criteria.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo(host, port, &sock_criteria, &res) != 0) {
+        return -1;
+    } 
 
-    if (getaddrinfo(host, port, &sock_criteria, &res) != 0) return -1;
-
-    for (p = res; p != NULL; p = p->ai_next) {
-        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (sock == -1) continue;
+    struct addrinfo *current = res;
+    while (current != NULL) {
+        sock = socket(current->ai_family, current->ai_socktype, current->ai_protocol);
         
-        if (connect(sock, p->ai_addr, p->ai_addrlen) != -1) break;
-        close(sock);
+        if (sock != -1) {
+            if (connect(sock, current->ai_addr, current->ai_addrlen) != -1) {
+                break;
+            }
+            close(sock);
+        }
+        current = current->ai_next;
     }
 
     freeaddrinfo(res);
-    return (p == NULL) ? -1 : sock;
+    if (current == NULL) {
+        return -1;
+    }
+
+    return sock;
 }
 
 void fetch_and_display(int sock, const char* host, const char* path) {
@@ -100,13 +110,15 @@ void fetch_and_display(int sock, const char* host, const char* path) {
 
     fd_set descriptor_set;
     int max_descriptor = (sock > STDIN_FILENO) ? sock : STDIN_FILENO;
-
+    char buffer_read[1024];
+    int buf_len = 0;
+    int buf_pos = 0;
     while (1) {
         FD_ZERO(&descriptor_set);
-        FD_SET(STDIN_FILENO, &descriptor_set);
+        FD_SET(STDIN_FILENO, &descriptor_set); 
         
-        if (!paused) {
-            FD_SET(sock, &descriptor_set);
+        if (!paused && buf_pos == buf_len) {
+            FD_SET(sock, &descriptor_set);   
         }
 
         int status = select(max_descriptor + 1, &descriptor_set, NULL, NULL, NULL);
@@ -116,37 +128,49 @@ void fetch_and_display(int sock, const char* host, const char* path) {
             char key;
             if (read(STDIN_FILENO, &key, 1) > 0) {
                 if (paused && key == ' ') {
-                    paused = false;
-                    line_count = 0;
+                    paused = false; 
+                    line_count = 0; 
                     fflush(stdout);
                 }
             }
         }
 
-        if (!paused && FD_ISSET(sock, &descriptor_set)) {
-            char curr_byte;
-            int bytes_received = recv(sock, &curr_byte, 1, 0);
-            if (bytes_received <= 0) break;
-
-            if (!reading_content) {
-                if ((curr_byte == '\r' && (state == 0 || state == 2)) || (curr_byte == '\n' && (state == 1 || state == 3))) state++;
-                else state = (curr_byte == '\r') ? 1 : 0;
-                if (state == 4) reading_content = 1;
-                continue;
+        if (!paused) {
+            if (buf_pos == buf_len && FD_ISSET(sock, &descriptor_set)) {
+                buf_len = recv(sock, buffer_read, sizeof(buffer_read), 0); 
+                if (buf_len <= 0) break;
+                buf_pos = 0; 
             }
 
-            putchar(curr_byte);
-            fflush(stdout);
+            while(buf_pos < buf_len){
+                char curr_byte = buffer_read[buf_pos++];
 
-            if (curr_byte == '\n') {
-                line_count++;
-                if (line_count >= LINES_PER_PAGE) {
-                    printf("[Press SPACE to scroll down]\n");
-                    fflush(stdout);
-                    paused = true;
+                if (!reading_content) {
+                    if ((curr_byte == '\r' && (state == 0 || state == 2)) || (curr_byte == '\n' && (state == 1 || state == 3))) {
+                        state++;
+                    } else {
+                        state = (curr_byte == '\r') ? 1 : 0;
+                    }
+                    if (state == 4) {
+                        reading_content = 1;
+                    }
+                    continue;
+                }
+                putchar(curr_byte);
+                fflush(stdout);
+
+                if (curr_byte == '\n') {
+                    line_count++;
+                    if (line_count >= LINES_PER_PAGE) {
+                        printf("[Press SPACE to scroll down]");
+                        fflush(stdout);
+                        paused = true; 
+                        break;
+                    }
                 }
             }
         }
+        fflush(stdout);
     }
 }
 
@@ -163,7 +187,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    setup_unbuffered_mode();
+    setup_unbuffered_mode(); 
 
     int sock = connect_to_server(host, port);
     if (sock < 0) {
