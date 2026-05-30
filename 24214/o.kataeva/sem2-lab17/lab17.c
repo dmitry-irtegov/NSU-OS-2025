@@ -10,12 +10,12 @@ typedef struct Node {
 } Node;
 
 pthread_mutex_t mutex;
-Node* dummy_node;
-int size;
+Node* dummy_node = NULL;
+int size = 0;
 
 volatile int should_exit = 0; 
 
-void add_in_begining(Node* dummy_node, Node* new_node) {
+void add_in_begining(Node* new_node) {
     pthread_mutex_lock(&mutex);
     new_node->next = dummy_node->next;
     dummy_node->next = new_node;
@@ -42,11 +42,14 @@ void free_list() {
         free(current); 
         current = next;
     }
+    dummy_node = NULL;
+    size = 0;
     pthread_mutex_unlock(&mutex);
     pthread_mutex_destroy(&mutex); 
 }
 
 void* sort(void* param) {
+    (void)param;
     while(!should_exit) {
         sleep(5);
         pthread_mutex_lock(&mutex);
@@ -76,17 +79,23 @@ void* sort(void* param) {
     return NULL;
 }
 
-int main(int argc, char const *argv[]) {
+int main() {
     pthread_mutex_init(&mutex, NULL);
     dummy_node = (Node*)malloc(sizeof(Node));
+    if (dummy_node == NULL) {
+        perror("malloc dummy_node");
+        return -1;
+    }
     dummy_node->next = NULL;
     size = 0;
+    
     char buffer[BUFSIZ];
     pthread_t thread;
     
     if (pthread_create(&thread, NULL, sort, NULL) != 0) {
         perror("pthread_create");
         free(dummy_node);
+        pthread_mutex_destroy(&mutex);
         return -1;
     }
 
@@ -97,18 +106,15 @@ int main(int argc, char const *argv[]) {
         }
         
         size_t n = strcspn(buffer, "\n");
-        if (n == 0) {
-            continue;
-        }
-        buffer[n] = '\0';
+        buffer[n] = '\0';        
         Node* new_node = (Node*)malloc(sizeof(Node));
         if (new_node == NULL) {
-            perror("malloc");
+            perror("malloc new_node");
             continue;
         }
-        new_node->next = NULL;
-        memcpy(&(new_node->sentence), &buffer, BUFSIZ);
-        add_in_begining(dummy_node, new_node);
+        
+        strcpy(new_node->sentence, buffer);
+        add_in_begining(new_node);
     }
 
     should_exit = 1; 
