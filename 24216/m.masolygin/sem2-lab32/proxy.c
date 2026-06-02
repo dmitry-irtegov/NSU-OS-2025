@@ -236,6 +236,7 @@ void* handle_client(void* arg) {
 
     free(wbuf);
     shutdown(server_fd, SHUT_RDWR);
+    shutdown(client_fd, SHUT_RDWR);
     close(server_fd);
     close(client_fd);
     pthread_exit(NULL);
