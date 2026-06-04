@@ -30,6 +30,12 @@ typedef struct {
 
 static connection_t conns[MAX_CONN];
 static int active_count = 0;
+static volatile sig_atomic_t stop_requested = 0;
+
+static void sigint_handler(int signo) {
+    (void)signo;
+    stop_requested = 1;
+}
 
 static void init_connections(void) {
     for (int i = 0; i < MAX_CONN; i++) {
@@ -58,7 +64,17 @@ static void close_connection(int i) {
     conns[i].s2c_len = 0;
     conns[i].s2c_off = 0;
 
-    active_count--;
+    if (active_count > 0) {
+        active_count--;
+    }
+}
+
+static void close_all_connections(void) {
+    for (int i = 0; i < MAX_CONN; i++) {
+        if (conns[i].client_fd != -1 || conns[i].server_fd != -1) {
+            close_connection(i);
+        }
+    }
 }
 
 static int find_free_slot(void) {
@@ -109,6 +125,7 @@ static int create_listener(const char *port) {
     }
 
     freeaddrinfo(res);
+
     return listen_fd;
 }
 
@@ -135,12 +152,11 @@ static int connect_to_target(struct addrinfo *target) {
 static int read_to_buffer(int fd, char *buf, size_t *len, size_t *off) {
     ssize_t n;
 
-    n = read(fd, buf, BUF_SIZE);
-    if (n < 0) {
-        if (errno == EINTR) {
-            return 0;
-        }
+    do {
+        n = read(fd, buf, BUF_SIZE);
+    } while (n < 0 && errno == EINTR);
 
+    if (n < 0) {
         return -1;
     }
 
@@ -157,12 +173,11 @@ static int read_to_buffer(int fd, char *buf, size_t *len, size_t *off) {
 static int write_from_buffer(int fd, char *buf, size_t *len, size_t *off) {
     ssize_t n;
 
-    n = write(fd, buf + *off, *len - *off);
-    if (n < 0) {
-        if (errno == EINTR) {
-            return 0;
-        }
+    do {
+        n = write(fd, buf + *off, *len - *off);
+    } while (n < 0 && errno == EINTR);
 
+    if (n < 0) {
         return -1;
     }
 
@@ -216,6 +231,18 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigint_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+
+    if (sigaction(SIGINT, &sa, NULL) == -1) {
+        perror("sigaction");
+        freeaddrinfo(target);
+        return 1;
+    }
+
     listen_fd = create_listener(listen_port);
     if (listen_fd == -1) {
         perror("create_listener");
@@ -229,7 +256,7 @@ int main(int argc, char **argv) {
            listen_port, target_host, target_port);
     fflush(stdout);
 
-    while (1) {
+    while (!stop_requested) {
         int nfds = 0;
 
         pfds[nfds].fd = listen_fd;
@@ -287,12 +314,20 @@ int main(int argc, char **argv) {
             break;
         }
 
+        if (pfds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+            fprintf(stderr, "listen socket error\n");
+            break;
+        }
+
         if (pfds[0].revents & POLLIN) {
             int client_fd;
             int server_fd;
             int slot;
 
-            client_fd = accept(listen_fd, NULL, NULL);
+            do {
+                client_fd = accept(listen_fd, NULL, NULL);
+            } while (client_fd == -1 && errno == EINTR);
+
             if (client_fd != -1) {
                 slot = find_free_slot();
 
@@ -374,8 +409,9 @@ int main(int argc, char **argv) {
         }
     }
 
+    close_all_connections();
     close(listen_fd);
     freeaddrinfo(target);
 
-    return 1;
+    return stop_requested ? 1 : 0;
 }
