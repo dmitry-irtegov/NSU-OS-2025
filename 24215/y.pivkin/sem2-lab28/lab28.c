@@ -169,6 +169,8 @@ void check_reply(int s) {
     int headers_pass = 0;
     int sock_closed = 0;
 
+    int cut_symbols = 0;
+
     while (1) {
         if (print_pos >= pending_len) {
             if (sock_closed)
@@ -181,22 +183,39 @@ void check_reply(int s) {
             }
 
             if (!headers_pass) {
-                buf[n] = '\0';
+                int body, found = 0;
 
-                char *body = strstr(buf, "\r\n\r\n");
-                if (!body)
-                    continue;
+                for (int i = 0; i < n; i++) {
+                    if (cut_symbols == 0 && buf[i] == '\r')
+                        cut_symbols = 1;
+                    else if (cut_symbols == 1 && buf[i] == '\n')
+                        cut_symbols = 2;
+                    else if (cut_symbols == 2 && buf[i] == '\r')
+                        cut_symbols = 3;
+                    else if (cut_symbols == 3 && buf[i] == '\n') {
+                        found = 1;
+                        body = i + 1;
 
-                body += 4;
-                int len = n - (body - buf);
-                if (pending_len + len > cap) {
-                    cap *= 2;
-                    pending = realloc(pending, cap);
+                        break;
+                    } else {
+                        if (buf[i] == '\r')
+                            cut_symbols = 1;
+                        else
+                            cut_symbols = 0;
+                    }
                 }
 
-                memcpy(pending + pending_len, body, len);
-                pending_len += len;
-                headers_pass = 1;
+                if (found) {
+                    int len = n - body;
+                    if (pending_len + len > cap) {
+                        cap *= 2;
+                        pending = realloc(pending, cap);
+                    }
+
+                    memcpy(pending + pending_len, buf + body, len);
+                    pending_len += len;
+                    headers_pass = 1;
+                }
             } else {
                 if (pending_len + n > cap) {
                     cap *= 2;
@@ -250,4 +269,3 @@ int main(int argc, char *argv[]) {
     printf("\n");
     return 0;
 }
-
