@@ -243,6 +243,11 @@ int parse_http_request(Session *s) {
         return -1;
     }
 
+    if (strncmp(s->uri, "http://", 7) != 0) {
+        fprintf(stderr, "Invalid request target: %s\n", s->uri);
+        return -1;
+    }
+
     char *version_ptr = strstr(s->request_buf, "HTTP/1.");
     if (version_ptr && (version_ptr < end_of_headers)) {
         memcpy(version_ptr, "HTTP/1.0", 8);
@@ -313,47 +318,6 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
     }
 
     return 1;
-}
-
-int parse_host_header(const char *request, char *host, size_t host_len, char *port, size_t port_len) {
-    const char *p = request;
-    int found = 0;
-    while ((p = strstr(p, "\r\n")) != NULL) {
-        p += 2;
-        if (strncasecmp(p, "Host:", 5) == 0) {
-            if (found) return -2;
-            found = 1;
-            p += 5;
-            while (*p == ' ' || *p == '\t') {
-                p++;
-            }
-            const char *line_end = strstr(p, "\r\n");
-            if (!line_end) return -1;
-
-            const char *colon = memchr(p, ':', (size_t)(line_end - p));
-            if (colon) {
-                size_t host_len_part = (size_t)(colon - p);
-                size_t port_len_part = (size_t)(line_end - colon - 1);
-                if (host_len_part == 0 || port_len_part == 0) return -1;
-                if (host_len_part >= host_len || port_len_part >= port_len) return -1;
-
-                memcpy(host, p, host_len_part);
-                host[host_len_part] = '\0';
-                memcpy(port, colon + 1, port_len_part);
-                port[port_len_part] = '\0';
-                if (!is_valid_port_string(port)) return -1;
-            } else {
-                size_t host_len_part = (size_t)(line_end - p);
-                if (host_len_part == 0 || host_len_part >= host_len) return -1;
-
-                memcpy(host, p, host_len_part);
-                host[host_len_part] = '\0';
-                if (snprintf(port, port_len, "%s", "80") >= (int)port_len) return -1;
-            }
-            return 1;
-        }
-    }
-    return 0;
 }
 
 int replace_request_target(Session *s, const char *new_target) {
@@ -620,90 +584,32 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     int parse_code = parse_http_request(s);
 
                     if (parse_code == 1) {
-                        if (s->uri[0] != '/' && strncmp(s->uri, "http://", 7) != 0) {
-                            fprintf(stderr, "Invalid request target: %s\n", s->uri);
-                            send_http_error(s, "400 Bad Request");
-                            close_session(s);
-                            break;
-                        }
-
                         char target_host[256];
                         char target_port[16];
                         const char *uri_to_parse = s->uri;
-                        if (s->uri[0] == '/' && strncmp(s->uri + 1, "http://", 7) == 0) {
-                            uri_to_parse = s->uri + 1;
-                        }
 
                         int parsed = parse_target_from_uri(uri_to_parse, target_host,
                                                           sizeof(target_host), target_port,
                                                           sizeof(target_port));
-                        int uri_is_absolute = (parsed == 1);
 
-                        if (parsed == -1) {
+                        if (parsed != 1) {
                             fprintf(stderr, "Invalid absolute URI: %s\n", uri_to_parse);
                             send_http_error(s, "400 Bad Request");
                             close_session(s);
                             break;
                         }
 
-                        if (parsed == 0) {
-                            parsed = parse_host_header(s->request_buf, target_host,
-                                                       sizeof(target_host), target_port,
-                                                       sizeof(target_port));
-                            if (parsed == -2) {
-                                fprintf(stderr, "Duplicate Host header\n");
-                                send_http_error(s, "400 Bad Request");
-                                close_session(s);
-                                break;
-                            }
-                            if (parsed == -1) {
-                                fprintf(stderr, "Invalid Host header\n");
-                                send_http_error(s, "400 Bad Request");
-                                close_session(s);
-                                break;
-                            }
-                            if (parsed == 0 && strcmp(s->version, "HTTP/1.1") == 0) {
-                                fprintf(stderr, "Missing Host header for HTTP/1.1\n");
-                                send_http_error(s, "400 Bad Request");
-                                close_session(s);
-                                break;
-                            }
-                        }
+                        const char *host_to_use = target_host;
+                        const char *port_to_use = target_port;
 
-                        const char *host_to_use;
-                        const char *port_to_use;
-
-                        if (parsed == 1) {
-                            host_to_use = target_host;
-                            port_to_use = target_port;
-                        } else {
-                            host_to_use = default_target_host;
-                            port_to_use = default_target_port;
-                        }
-
-                        if (!host_to_use || !port_to_use) {
+                        char cache_key[MAX_URI_LEN + 300];
+                        if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= 
+                            (int)sizeof(cache_key)) {
                             close_session(s);
                             break;
                         }
 
-                        char cache_key[MAX_URI_LEN + 300];
-                        if (uri_is_absolute) {
-                            if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= 
-                                (int)sizeof(cache_key)) {
-                                close_session(s);
-                                break;
-                            }
-                        } else {
-                            const char *path_prefix = (s->uri[0] == '/') ? "" : "/";
-                            if (snprintf(cache_key, sizeof(cache_key), 
-                                        "http://%s:%s%s%s", host_to_use, port_to_use, 
-                                        path_prefix, s->uri) >= (int)sizeof(cache_key)) {
-                                close_session(s);
-                                break;
-                            }
-                        }
-
-                        if (uri_is_absolute) {
+                        {
                             const char *path_start = strchr(uri_to_parse + strlen("http://"), '/');
                             if (!path_start) {
                                 path_start = "/";
