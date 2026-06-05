@@ -205,6 +205,11 @@ int parse_request(int client_fd, char *req_buf, size_t req_buf_size, int *req_le
         return PARSE_BAD_REQUEST;
     }
 
+    if (strncmp(uri, "http://", 7) != 0) {
+        fprintf(stderr, "Invalid request target: %s\n", uri);
+        return PARSE_BAD_REQUEST;
+    }
+
     {
         char *end_of_headers = strstr(req_buf, "\r\n\r\n");
         char *version_ptr = strstr(req_buf, "HTTP/1.");
@@ -271,61 +276,6 @@ int parse_target_from_uri(const char *uri, char *host, size_t host_len, char *po
     }
 
     return 1;
-}
-
-int parse_host_header(const char *request, char *host, size_t host_len, char *port, size_t port_len) {
-    const char *p = request;
-    int found = 0;
-    while ((p = strstr(p, "\r\n")) != NULL) {
-        p += 2;
-        if (strncasecmp(p, "Host:", 5) == 0) {
-            if (found) {
-                return -2;
-            }
-            found = 1;
-            p += 5;
-            while (*p == ' ' || *p == '\t') {
-                p++;
-            }
-            const char *line_end = strstr(p, "\r\n");
-            if (!line_end) {
-                return -1;
-            }
-
-            const char *colon = memchr(p, ':', (size_t)(line_end - p));
-            if (colon) {
-                size_t host_len_part = (size_t)(colon - p);
-                size_t port_len_part = (size_t)(line_end - colon - 1);
-                if (host_len_part == 0 || port_len_part == 0) {
-                    return -1;
-                }
-                if (host_len_part >= host_len || port_len_part >= port_len) {
-                    return -1;
-                }
-
-                memcpy(host, p, host_len_part);
-                host[host_len_part] = '\0';
-                memcpy(port, colon + 1, port_len_part);
-                port[port_len_part] = '\0';
-                if (!is_valid_port_string(port)) {
-                    return -1;
-                }
-            } else {
-                size_t host_len_part = (size_t)(line_end - p);
-                if (host_len_part == 0 || host_len_part >= host_len) {
-                    return -1;
-                }
-
-                memcpy(host, p, host_len_part);
-                host[host_len_part] = '\0';
-                if (snprintf(port, port_len, "%s", "80") >= (int)port_len) {
-                    return -1;
-                }
-            }
-            return 1;
-        }
-    }
-    return 0;
 }
 
 int replace_request_target(char *req_buf, int *req_len, size_t buf_size, const char *new_target) {
@@ -560,78 +510,29 @@ void* handle_client(void* arg) {
         return NULL;
     }
 
-    if (uri[0] != '/' && strncmp(uri, "http://", 7) != 0) {
-        fprintf(stderr, "Invalid request target: %s\n", uri);
-        send_http_error(client_fd, "400 Bad Request");
-        close_connection(client_fd);
-        free(arg);
-        return NULL;
-    }
-
     char target_host[256];
     char target_port[16];
     const char *uri_to_parse = uri;
 
-    if (strncmp(uri, "/http://", 8) == 0) {
-        uri_to_parse = uri + 1;
-    }
-
     int parsed = parse_target_from_uri(uri_to_parse, target_host, sizeof(target_host), target_port, sizeof(target_port));
-    int uri_is_absolute = (parsed == 1);
 
-    if (parsed == -1) {
-
+    if (parsed != 1) {
         fprintf(stderr, "Invalid absolute URI: %s\n", uri_to_parse);
         send_http_error(client_fd, "400 Bad Request");
         close_connection(client_fd);
         free(arg);
         return NULL;
-    } else if (parsed == 0) {
-
-        parsed = parse_host_header(req_buf, target_host, sizeof(target_host), target_port, sizeof(target_port));
-
-        if (parsed == -2) {
-            fprintf(stderr, "Duplicate Host header\n");
-            send_http_error(client_fd, "400 Bad Request");
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-
-        if (parsed == -1) {
-            fprintf(stderr, "Invalid Host header\n");
-            send_http_error(client_fd, "400 Bad Request");
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-
-        if (parsed == 0 && strcmp(version, "HTTP/1.1") == 0) {
-            fprintf(stderr, "Missing Host header for HTTP/1.1\n");
-            send_http_error(client_fd, "400 Bad Request");
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-
     }
 
-    const char *host_to_use = (parsed == 1) ? target_host : default_target_host;
-    const char *port_to_use = (parsed == 1) ? target_port : default_target_port;
+    const char *host_to_use = target_host;
+    const char *port_to_use = target_port;
 
-    if (!host_to_use || !port_to_use) {
-        close_connection(client_fd);
-        free(arg);
-        return NULL;
-    }
-
-    if (uri_is_absolute) {
+    {
         const char *path_start = strchr(uri_to_parse + strlen("http://"), '/');
-
         if (!path_start) {
             path_start = "/";
         }
-        
+
         if (replace_request_target(req_buf, &req_len, sizeof(req_buf), path_start) < 0) {
             close_connection(client_fd);
             free(arg);
@@ -652,19 +553,10 @@ void* handle_client(void* arg) {
     }
 
     char cache_key[MAX_URI_LEN + 300];
-    if (uri_is_absolute) {
-        if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= (int)sizeof(cache_key)) {
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
-    } else {
-        const char *path_prefix = (uri[0] == '/') ? "" : "/";
-        if (snprintf(cache_key, sizeof(cache_key), "http://%s:%s%s%s", host_to_use, port_to_use, path_prefix, uri) >= (int)sizeof(cache_key)) {
-            close_connection(client_fd);
-            free(arg);
-            return NULL;
-        }
+    if (snprintf(cache_key, sizeof(cache_key), "%s", uri_to_parse) >= (int)sizeof(cache_key)) {
+        close_connection(client_fd);
+        free(arg);
+        return NULL;
     }
 
     pthread_mutex_lock(&cache_list_mutex);
