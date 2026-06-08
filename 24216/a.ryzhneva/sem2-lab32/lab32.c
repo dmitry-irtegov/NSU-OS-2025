@@ -38,8 +38,6 @@ typedef struct CacheEntry {
 
 CacheEntry *cache_head = NULL;
 pthread_mutex_t cache_list_mutex = PTHREAD_MUTEX_INITIALIZER;
-static const char *default_target_host = NULL;
-static const char *default_target_port = NULL;
 
 void sig_handler(int signum) {
     if (signum == SIGINT || signum == SIGTERM) {
@@ -701,7 +699,7 @@ void* handle_client(void* arg) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
+    if (argc != 2) {
         fprintf(stderr, "Использование: %s <listen_port> <target_host> <target_port>\n", argv[0]);
         return EXIT_FAILURE;
     }
@@ -715,8 +713,6 @@ int main(int argc, char** argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    default_target_host = argv[2];
-    default_target_port = argv[3];
     int listen_fd = init_listen_socket(argv[1]);
 
     while(server_running) {
