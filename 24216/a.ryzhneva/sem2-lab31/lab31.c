@@ -239,7 +239,7 @@ int parse_http_request(Session *s) {
 
     if (strncmp(method, "GET", 3) != 0) {
         fprintf(stderr, "Unsupported HTTP method: %s\n", method);
-        return -1;
+        return -2;
     }
 
     if (strcmp(version, "HTTP/1.0") != 0 && strcmp(version, "HTTP/1.1") != 0) {
@@ -509,7 +509,9 @@ int build_poll_array(struct pollfd *pfds, int listen_fd) {
             pfds[client_idx].events |= POLLIN;
         } 
         else if (s->state == STATE_SERVE_CACHE || s->state == STATE_FETCH_SERVER) {
-            pfds[client_idx].events |= POLLOUT;
+            if (s->cache_entry && s->cache_offset < s->cache_entry->size) {
+                pfds[client_idx].events |= POLLOUT;
+            }
         }
 
         if ((s->state == STATE_FETCH_SERVER || s->state == STATE_SEND_REQUEST) && s->fd_server >= 0) {
@@ -547,12 +549,20 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         }   
     }
 
-    if (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLNVAL))) {
-        if (s->state == STATE_FETCH_SERVER && s->cache_entry) {
-            s->cache_entry->is_failed = 1;
+    if (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLHUP | POLLNVAL))) {
+        if (s->state == STATE_SEND_REQUEST && s->connect_pending) {
         }
-        close_session(s);
-        return;
+        else if (s->state == STATE_FETCH_SERVER 
+            && (pfds[server_idx].revents & POLLHUP) 
+            && !(pfds[server_idx].revents & (POLLERR | POLLNVAL))) {
+        }
+        else {
+            if (s->state == STATE_FETCH_SERVER && s->cache_entry) {
+                s->cache_entry->is_failed = 1;
+            }
+            close_session(s);
+            return;
+        }
     }
 
     if (s->state != STATE_READ_REQUEST) {
@@ -646,6 +656,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
 
                         struct addrinfo *target_addrinfo = resolve_target(host_to_use, port_to_use);
                         if (!target_addrinfo) {
+                            send_http_error(s, "502 Bad Gateway");
                             close_session(s);
                             break;
                         }
@@ -664,6 +675,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                         if (connect(s->fd_server, target_addrinfo->ai_addr, 
                                    target_addrinfo->ai_addrlen) < 0) {
                             if (errno != EINPROGRESS) {
+                                send_http_error(s, "502 Bad Gateway");
                                 freeaddrinfo(target_addrinfo);
                                 close_session(s);
                                 break;
@@ -680,6 +692,9 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     } else if (parse_code == -1) {
                         send_http_error(s, "400 Bad Request");
                         close_session(s);
+                    } else if (parse_code == -2) {
+                        send_http_error(s, "501 Not Implemented");
+                        close_session(s);
                     }
                 } else if (bytes_read == 0) {
                     close_session(s);
@@ -694,30 +709,33 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
             break;
 
         case STATE_SEND_REQUEST: {
-            if (server_idx >= 0 && (pfds[server_idx].revents & POLLOUT)) {
+            if (server_idx >= 0 && (pfds[server_idx].revents & (POLLOUT | POLLERR | POLLHUP | POLLIN))) {
                 if (s->connect_pending) {
                     int so_error = 0;
                     socklen_t so_error_len = sizeof(so_error);
                     if (getsockopt(s->fd_server, SOL_SOCKET, SO_ERROR, &so_error, &so_error_len) < 0 || so_error != 0) {
+                        send_http_error(s, "502 Bad Gateway");
                         close_session(s);
                         break;
                     }
                     s->connect_pending = 0;
                 }
-                printf("--- Запрос к серверу ---\n%.*s\n------------------------\n", s->request_len, s->request_buf);
-                int sent = send(s->fd_server, 
-                                s->request_buf + s->request_sent, 
-                                s->request_len - s->request_sent, 
-                                0);
-                
-                if (sent > 0) {
-                    s->request_sent += sent;
-                    if (s->request_sent == s->request_len) {
-                        s->state = STATE_FETCH_SERVER;
-                    }
-                } else if (sent < 0) {
-                    if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                        close_session(s);
+                if (pfds[server_idx].revents & POLLOUT) {
+                    printf("--- Запрос к серверу ---\n%.*s\n------------------------\n", s->request_len, s->request_buf);
+                    int sent = send(s->fd_server, 
+                                    s->request_buf + s->request_sent, 
+                                    s->request_len - s->request_sent, 
+                                    0);
+                    
+                    if (sent > 0) {
+                        s->request_sent += sent;
+                        if (s->request_sent == s->request_len) {
+                            s->state = STATE_FETCH_SERVER;
+                        }
+                    } else if (sent < 0) {
+                        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                            close_session(s);
+                        }
                     }
                 }
             }
@@ -749,7 +767,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                 }
             }
 
-            if (client_idx >= 0) {
+            if (client_idx >= 0 && (pfds[client_idx].revents & POLLOUT)) {
                 size_t available_bytes = s->cache_entry->size - s->cache_offset;
                 
                 if (available_bytes > 0) {
