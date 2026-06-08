@@ -17,6 +17,9 @@
 #define MAX_URI_LEN 2048
 #define MAX_METHOD_LEN 16
 #define MAX_VERSION_LEN 16
+#define MAX_PORT_LEN 16
+#define MAX_SIZE_RESPONSE 128
+#define MAX_HOST_LEN 256
 #define STATE_READ_REQUEST  1
 #define STATE_CACHE_LOOKUP  2
 #define STATE_FETCH_SERVER  3
@@ -58,7 +61,7 @@ CacheEntry *cache_head = NULL;
 CacheEntry* cache_lookup(const char *uri) {
     CacheEntry *curr = cache_head;
     while (curr != NULL) {
-        if (strcmp(curr->uri, uri) == 0) {
+        if (strcmp(curr->uri, uri) == 0 && curr->is_failed == 0) {
             return curr;
         }
         curr = curr->next;
@@ -152,12 +155,10 @@ static int is_valid_port_string(const char *port) {
     return value > 0;
 }
 
-static const char *default_target_host = NULL;
-static const char *default_target_port = NULL;
 Session sessions[MAX_SESSIONS];
 
-void sig_handler(int signum) {
-    if (signum == SIGINT || signum == SIGTERM) {
+void sig_handler(int sig) {
+    if (sig == SIGINT || sig == SIGTERM) {
         flag = 0;
     }
 }
@@ -182,7 +183,7 @@ static void send_http_error(Session *s, const char *status_line) {
     if (!s || !status_line) {
         return;
     }
-    char response[128];
+    char response[MAX_SIZE_RESPONSE];
     int len = snprintf(response, sizeof(response), "HTTP/1.0 %s\r\n\r\n", status_line);
     if (len <= 0 || len >= (int)sizeof(response)) {
         return;
@@ -204,6 +205,9 @@ void close_session(Session *s) {
     }
 
     if (s->cache_entry != NULL) {
+        if (s->cache_entry->is_complete == 0) {
+            s->cache_entry->is_failed = 1;
+        }
         cache_release_entry(s->cache_entry);
         s->cache_entry = NULL;
     }
@@ -352,7 +356,7 @@ int replace_request_target(Session *s, const char *new_target) {
 }
 
 int set_host_header(Session *s, const char *host, const char *port) {
-    char host_value[300];
+    char host_value[MAX_HOST_LEN];
     if (!host || !port) {
         return -1;
     }
@@ -406,22 +410,20 @@ int set_host_header(Session *s, const char *host, const char *port) {
         line = strstr(line, "\r\n");
     }
 
-    {
-        const char *prefix = "\r\nHost: ";
-        size_t prefix_len = strlen(prefix);
-        size_t value_len = strlen(host_value);
-        size_t insert_len = prefix_len + value_len;
+    const char *prefix = "\r\nHost: ";
+    size_t prefix_len = strlen(prefix);
+    size_t value_len = strlen(host_value);
+    size_t insert_len = prefix_len + value_len;
 
-        if ((size_t)s->request_len + insert_len >= BUF_SIZE) {
-            return -1;
-        }
-
-        memmove(headers_end + insert_len, headers_end,
-                (size_t)s->request_len - (size_t)(headers_end - s->request_buf) + 1);
-        memcpy(headers_end, prefix, prefix_len);
-        memcpy(headers_end + prefix_len, host_value, value_len);
-        s->request_len += (int)insert_len;
+    if ((size_t)s->request_len + insert_len >= BUF_SIZE) {
+        return -1;
     }
+
+    memmove(headers_end + insert_len, headers_end,
+            (size_t)s->request_len - (size_t)(headers_end - s->request_buf) + 1);
+    memcpy(headers_end, prefix, prefix_len);
+    memcpy(headers_end + prefix_len, host_value, value_len);
+    s->request_len += (int)insert_len;
 
     return 0;
 }
@@ -545,7 +547,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         }   
     }
 
-    if (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLNVAL | POLLHUP))) {
+    if (server_idx >= 0 && (pfds[server_idx].revents & (POLLERR | POLLNVAL))) {
         if (s->state == STATE_FETCH_SERVER && s->cache_entry) {
             s->cache_entry->is_failed = 1;
         }
@@ -584,8 +586,8 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     int parse_code = parse_http_request(s);
 
                     if (parse_code == 1) {
-                        char target_host[256];
-                        char target_port[16];
+                        char target_host[MAX_HOST_LEN];
+                        char target_port[MAX_PORT_LEN];
                         const char *uri_to_parse = s->uri;
 
                         int parsed = parse_target_from_uri(uri_to_parse, target_host,
@@ -702,7 +704,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
                     }
                     s->connect_pending = 0;
                 }
-
+                printf("--- Запрос к серверу ---\n%.*s\n------------------------\n", s->request_len, s->request_buf);
                 int sent = send(s->fd_server, 
                                 s->request_buf + s->request_sent, 
                                 s->request_len - s->request_sent, 
@@ -723,7 +725,7 @@ void handle_session_io(Session *s, struct pollfd *pfds) {
         }
 
         case STATE_FETCH_SERVER: {
-            if (server_idx >= 0 && (pfds[server_idx].revents & POLLIN)) {
+            if (server_idx >= 0 && (pfds[server_idx].revents & (POLLIN | POLLHUP))) {
                 char temp_buf[BUF_SIZE];
                 int bytes_read = recv(s->fd_server, temp_buf, sizeof(temp_buf), 0);
 
@@ -838,14 +840,12 @@ void handle_new_connection(int listen_fd) {
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
+    if (argc != 2) {
         fprintf(stderr, "Invalid input. Incorrect count of argument.\n");
         return EXIT_FAILURE;
     }
 
     const char *listen_port = argv[1];
-    const char *target_host = argv[2];
-    const char *target_port = argv[3];
 
     signal(SIGPIPE, SIG_IGN);
 
@@ -856,8 +856,6 @@ int main(int argc, char** argv) {
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
 
-    default_target_host = target_host;
-    default_target_port = target_port;
     int listen_fd = init_listen_socket(listen_port);
     init_sessions();
 
