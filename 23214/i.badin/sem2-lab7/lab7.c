@@ -232,7 +232,6 @@ void* copy_directory(void* arg) {
         return NULL;
     }
 
-    errno = 0;
     long name_max = pathconf(task->src_path, _PC_NAME_MAX);
     if (name_max == -1) {
         name_max = NAME_MAX;
