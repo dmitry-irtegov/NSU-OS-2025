@@ -5,7 +5,7 @@ import sys
 import os
 from threading import Thread
 
-PORT = 8000
+PORT = 8002
 CHUNK_SIZE = 80  # 80 bytes per chunk
 CHUNKS_PER_SECOND = 10
 
